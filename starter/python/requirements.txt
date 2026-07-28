@@ -1,0 +1,8 @@
+web3>=6.20,<7.0
+python-dotenv>=1.0
+numpy>=1.26
+scikit-learn>=1.4
+# Optional für Phase 3 (Teams können erweitern):
+# xgboost>=2.0
+# prophet>=1.1
+# tensorflow>=2.15

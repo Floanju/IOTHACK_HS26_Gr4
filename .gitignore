@@ -1,0 +1,10 @@
+.DS_Store
+python/.env
+python/venv/
+python/__pycache__/
+**/__pycache__/
+*.pyc
+data/history.db
+artifacts/
+cache/
+node_modules/

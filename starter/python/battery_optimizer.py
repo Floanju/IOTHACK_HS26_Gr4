@@ -143,8 +143,18 @@ def main():
                 # ─────────────────────────────────────────────────────
                 # TODO (Teams): Entscheidung on-chain protokollieren
                 #
-                # Falls eure Solidity-Variante in BatteryManager.decideAction
-                # die ganze Logik macht, ruft ihr nur die Funktion auf:
+                # WICHTIG: Falls ihr P2PEnergyMarket.setBatteryManager() gesetzt
+                # habt (siehe README, empfohlene Phase-2-Integration), ruft
+                # settleSlot() decideAction() bereits selbst live pro Slot auf -
+                # ihr müsst es dann hier NICHT zusätzlich aufrufen (sonst läuft
+                # die Entscheidung doppelt: einmal hier, einmal in settleSlot(),
+                # mit unnötigen Gaskosten und zwei DecisionMade-Events pro Slot).
+                # Dieser Block ist dann nur noch für lokale Sichtbarkeit/Debugging
+                # nützlich (siehe print() oben) - keine on-chain-Transaktion nötig.
+                #
+                # Falls ihr KEINE Integration in P2PEnergyMarket baut und die
+                # Entscheidung trotzdem sichtbar/protokolliert haben wollt, ruft
+                # sie hier auf (Solidity-Variante macht die ganze Logik):
                 #
                 # nonce = w3.eth.get_transaction_count(account.address, "pending")
                 # tx = battery_mgr.functions.decideAction(addr).build_transaction({...})

@@ -73,6 +73,12 @@ class EnergySimulator:
         with open(config_path) as f:
             self.config = json.load(f)
 
+        # Hinweis: start_real_time und battery_soc leben nur im Prozessspeicher
+        # dieser Instanz - bei jedem Neustart von oracle_writer.py (der diese
+        # Klasse instanziiert) beginnt die simulierte Uhrzeit wieder bei 0 und
+        # der SoC wieder bei 50%. Das ist eine bekannte Einschränkung der
+        # Simulation, kein Bug. Persistenz über Neustarts hinweg gibt es
+        # bewusst nicht (siehe README, Abschnitt "Tipps").
         self.start_real_time = time.time()
         # SoC pro Haushalt im Speicher tracken (initial 50%)
         self.battery_soc: Dict[str, float] = {

@@ -2,6 +2,7 @@
 pragma solidity ^0.8.20;
 
 import "./interfaces/IOracleStorage.sol";
+import "./interfaces/IBatteryManager.sol";
 
 /**
  * @title BatteryManager
@@ -12,13 +13,18 @@ import "./interfaces/IOracleStorage.sol";
  *            entscheidet pro Slot, ob die Batterie geladen, entladen
  *            oder leer/voll bleibt, und protokolliert die Entscheidung.
  *
- *      Die eigentliche physische Batterie ist simuliert - das Python-Skript
- *      `battery_optimizer.py` liest die hier protokollierten Entscheidungen
- *      und passt den simulierten SoC im Oracle entsprechend an.
+ *      Wichtig: Die simulierte SoC-Kurve im OracleStorage läuft unabhängig
+ *      von diesen Entscheidungen weiter (sie folgt im Simulator nur
+ *      production/consumption) - dieser Contract kann sie NICHT zurückschreiben.
+ *      Wirksam wird eure Entscheidung stattdessen dadurch, dass
+ *      P2PEnergyMarket.settleSlot() optional decideAction() aufruft und die
+ *      gehandelte Energiemenge entsprechend anpasst (siehe P2PEnergyMarket.sol,
+ *      Feld `batteryManager` + `setBatteryManager()`).
+ *
+ *      Dieser Contract implementiert IBatteryManager, damit P2PEnergyMarket
+ *      ihn über das Interface ansprechen kann, ohne den vollen Code zu kennen.
  */
-contract BatteryManager {
-
-    enum Action { IDLE, CHARGE, DISCHARGE }
+contract BatteryManager is IBatteryManager {
 
     // ─────────────────────────────────────────────────────────────
     //  Storage

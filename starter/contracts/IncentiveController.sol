@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
+import "./interfaces/IIncentiveController.sol";
+
 /**
  * @title IncentiveController
  * @notice Phase 3 (OPTIONAL): Belohnt Haushalte mit besseren Preisen,
@@ -13,9 +15,15 @@ pragma solidity ^0.8.20;
  *        C) Community-Pool mit geteiltem Bonus (anspruchsvoll)
  *
  *      Das Python-Skript `ai_forecast.py` schreibt Prognosen in diesen Contract.
- *      Bei der Settlement-Phase liest P2PEnergyMarket den Preisfaktor aus.
+ *      Bei der Settlement-Phase liest P2PEnergyMarket den Preisfaktor aus
+ *      (siehe P2PEnergyMarket.sol, Feld `incentiveController` +
+ *      `setIncentiveController()`).
+ *
+ *      Dieser Contract implementiert IIncentiveController, damit
+ *      P2PEnergyMarket ihn über das Interface ansprechen kann, ohne den
+ *      vollen Code zu kennen (gleiches Muster wie IBatteryManager in Phase 2).
  */
-contract IncentiveController {
+contract IncentiveController is IIncentiveController {
 
     // ─────────────────────────────────────────────────────────────
     //  Storage

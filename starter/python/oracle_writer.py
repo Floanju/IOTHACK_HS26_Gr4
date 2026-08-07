@@ -12,6 +12,22 @@ Verantwortlichkeiten:
   - Wetterdaten on-chain schreiben
   - Nonce-Management & Retry bei Gas-Problemen
 
+Hinweis zum Timing (bekannte Einschränkung, kein Bug in eurem Contract-Code):
+  Pro Slot werden hier bis zu 8 sequenzielle Transaktionen gesendet
+  (updateSlot, updateWeather, pro Haushalt updateMeter + updateBattery).
+  Bei ~12s Blockzeit auf Sepolia kann ein Durchlauf locker die Ziel-Slotdauer
+  von 60s überschreiten. `OracleStorage.currentSlot` läuft nach
+  `block.timestamp`, nicht nach Anzahl `updateSlot()`-Aufrufen - er kann also
+  auch mal Sprünge machen, wenn ein Durchlauf länger als 60s dauert. Plant
+  eure Contract-Logik (v.a. settleSlot()) so, dass sie nicht auf exakte
+  60-Sekunden-Abstände zwischen Slots angewiesen ist.
+
+  Zusätzlich: Die simulierte Tageszeit und der Batterie-SoC leben nur im
+  Prozessspeicher des EnergySimulator (siehe data_simulator.py). Bei jedem
+  Neustart dieses Skripts (z.B. beim Debuggen) beginnt die simulierte Uhrzeit
+  wieder bei 0 und der SoC wieder bei 50% - das ist erwartetes Verhalten,
+  kein Fehler in eurem Contract-Code.
+
 Voraussetzung:
   - .env mit ORACLE_PRIVATE_KEY (Wallet, die als autorisierter Oracle eingetragen ist)
   - config.json mit deployten Contract-Adressen

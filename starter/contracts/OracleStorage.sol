@@ -32,7 +32,8 @@ contract OracleStorage is IOracleStorage {
     // Historie pro Haushalt und Slot (optional, für AI-Phase 3)
     mapping(address => mapping(uint256 => MeterReading)) public meterHistory;
 
-    // Slot-Counter: 1 Slot = 1 Simulationsminute = 15 Echtzeit-Minuten
+    // Slot-Counter: 1 Slot = 1 reale Minute = 15 Simulationsminuten
+    // (konsistent mit config.json und data_simulator.py)
     uint256 public currentSlot;
     uint256 public immutable startTimestamp;
     uint256 public constant SLOT_DURATION = 60; // 60 Sekunden

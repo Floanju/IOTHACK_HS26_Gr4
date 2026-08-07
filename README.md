@@ -9,7 +9,9 @@ Lest dieses README vollständig, bevor ihr beginnt.
 contracts/
   ├── interfaces/
   │   ├── IEnergyStablecoin.sol      # Interface des extern bereitgestellten Tokens
-  │   └── IOracleStorage.sol         # Interface zum Lesen aus dem Oracle
+  │   ├── IOracleStorage.sol         # Interface zum Lesen aus dem Oracle
+  │   ├── IBatteryManager.sol        # Interface für optionale Phase-2-Integration in P2PEnergyMarket
+  │   └── IIncentiveController.sol   # Interface für optionale Phase-3-Integration in P2PEnergyMarket
   ├── OracleStorage.sol              # ✅ VOLLSTÄNDIG - nicht ändern, nur deployen
   ├── P2PEnergyMarket.sol            # 🟡 STARTER - Phase 1, settleSlot() implementieren
   ├── BatteryManager.sol             # 🟡 STARTER - Phase 2, decideAction() implementieren
@@ -105,6 +107,15 @@ Kopiert sie nach `python/abi/` für die Skripte.
    python deploy_helper.py IncentiveController
    ```
 
+5. **Verknüpfung mit P2PEnergyMarket** (Phase 2/3, sobald deployed)
+   BatteryManager und IncentiveController sind erst wirksam, wenn ihr sie im
+   P2PEnergyMarket eintragt - sonst verhält sich `settleSlot()` weiterhin
+   exakt wie in Phase 1, ohne Fehlermeldung (stiller Fallback):
+   ```
+   p2pMarket.setBatteryManager(batteryManagerAddress)
+   p2pMarket.setIncentiveController(incentiveControllerAddress)
+   ```
+
 ### 4. Oracle autorisieren
 
 Der `oracle_writer.py` braucht ein Wallet, das im OracleStorage als Oracle eingetragen ist.
@@ -166,19 +177,39 @@ Die `TODO`-Markierungen in den Starter-Files zeigen genau, wo eure Arbeit geford
 **Phase 2 (Pflicht):**
 - `BatteryManager.sol` → `decideAction()`: Lade-/Entladestrategie
 - `battery_optimizer.py` → `decide_action()`: gleiche Logik in Python (alternativ)
+- (Empfohlen) `P2PEnergyMarket.sol` → nach dem Deployment von `BatteryManager`
+  einmalig `setBatteryManager(address)` aufrufen und in `settleSlot()` die
+  Batterie-Entscheidung in den gehandelten Nettowert einrechnen (siehe
+  Kommentare in `settleSlot()` + `interfaces/IBatteryManager.sol`). Ohne
+  diesen Schritt läuft der Handel weiter exakt wie in Phase 1, unabhängig
+  davon, was `BatteryManager` entscheidet.
 
 **Phase 3 (Optional, Bonus):**
 - `IncentiveController.sol` → `_updateScoreForSlot()`, `getPriceMultiplier()`: Incentive-Modell
 - `ai_forecast.py` → `ForecastModel`: Modell durch eigenes ersetzen
-- Integration in `P2PEnergyMarket.settleSlot()`: Preis um Multiplier anpassen
+- Integration in `P2PEnergyMarket.settleSlot()`: nach dem Deployment von
+  `IncentiveController` einmalig `setIncentiveController(address)` aufrufen;
+  der Preis wird dann pro Match mit dem Multiplikator des Konsumenten
+  (Käufer) skaliert (siehe Kommentare in `settleSlot()` +
+  `interfaces/IIncentiveController.sol`). Ohne diesen Schritt bleibt der
+  Preis exakt wie in Phase 1/2, unabhängig vom Reputationsscore.
 
 ## Tipps
 
 - **Logging:** Nutzt Solidity-Events generös. Auf Sepolia Etherscan könnt ihr alle Events nachvollziehen.
 - **Debug:** Lokal testen mit Hardhat-Network spart Sepolia-ETH und Zeit.
 - **Gas:** Bei Out-of-Gas-Fehlern in `settleSlot()`: auf einzelne Haushalte aufteilen statt grosser Schleife.
+  Wird relevanter, sobald ihr BatteryManager/IncentiveController einbindet (siehe unten) -
+  das bedeutet zusätzliche externe Calls pro Haushalt in `settleSlot()`.
 - **Decimals:** Stablecoin nutzt 6 Decimals. 1 Token = 1_000_000 Token-Units.
-- **Slot-Timing:** Echtzeit ist 1 Slot/Minute. Plant eure Logik entsprechend.
+- **Neustart:** Simulierte Tageszeit und Batterie-SoC leben nur im Prozessspeicher von
+  `oracle_writer.py`. Ein Neustart des Skripts (z.B. beim Debuggen) setzt beides zurück
+  auf den Startwert (Sim-Zeit=0, SoC=50%) - das ist erwartetes Verhalten, kein Bug.
+- **Slot-Timing:** Ziel ist 1 Slot/Minute, aber der Oracle-Writer sendet dafür bis zu 8
+  sequenzielle Transaktionen pro Slot. Bei ~12s Blockzeit auf Sepolia kann das die 60s
+  leicht überschreiten - `currentSlot` (läuft nach `block.timestamp`) kann dabei auch mal
+  springen. Plant eure Logik so, dass sie nicht auf exakte 60s-Abstände angewiesen ist
+  (siehe Hinweis in `oracle_writer.py`).
 
 ## Bewertung
 

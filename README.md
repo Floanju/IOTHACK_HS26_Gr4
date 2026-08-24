@@ -51,28 +51,19 @@ cp .env.example .env
 
 Nach Wahl des Teams. Empfehlung: Hardhat.
 
+**Hinweis:** Hardhat entwickelt sich schnell weiter - die genauen Prompts von
+`npx hardhat init` (bzw. je nach Version `npx hardhat --init`) ändern sich
+zwischen Versionen. Folgt einfach den aktuellen Standard-Vorgaben des
+Installers (Node.js 22.13+ wird vorausgesetzt); für dieses Repo braucht ihr
+danach nur `npx hardhat compile` zum Laufen zu bringen - Deployment und alle
+On-Chain-Interaktionen laufen über die Python-Skripte (`deploy_helper.py`
+etc.), nicht über Hardhat selbst. Ob euer Setup ein `hardhat.config.js` oder
+`hardhat.config.ts` erzeugt, spielt dafür keine Rolle; ein Sepolia-Netzwerk-
+Eintrag in der Hardhat-Config ist für diesen Workflow nicht erforderlich.
+
 ```bash
 mkdir hackathon && cd hackathon
-npm init -y
-npm install --save-dev hardhat @openzeppelin/contracts
-npx hardhat init    # "Empty hardhat.config.js" auswählen
-```
-
-`hardhat.config.js`:
-
-```javascript
-require("@nomicfoundation/hardhat-toolbox");
-require("dotenv").config();
-
-module.exports = {
-  solidity: "0.8.24",
-  networks: {
-    sepolia: {
-      url: process.env.SEPOLIA_RPC_URL || "https://rpc.sepolia.org",
-      accounts: [process.env.DEPLOYER_PRIVATE_KEY],
-    },
-  },
-};
+npx hardhat --init
 ```
 
 Kopiert die `.sol`-Dateien in `contracts/` und compiliert:

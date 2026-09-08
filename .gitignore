@@ -9,3 +9,4 @@ artifacts/
 cache/
 node_modules/
 hackathon/
+.env

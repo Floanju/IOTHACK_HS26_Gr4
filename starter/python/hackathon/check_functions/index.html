@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<title>Energy Trading — Chain Viewer</title>
+<script src="https://cdn.jsdelivr.net/npm/web3@1.10.4/dist/web3.min.js"></script>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, Segoe UI, Roboto, sans-serif;
+    background: #0f1115;
+    color: #e6e6e6;
+    margin: 0;
+    padding: 24px;
+  }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h2 { font-size: 15px; margin: 0 0 10px; color: #9fd3ff; }
+  .sub { color: #888; font-size: 13px; margin-bottom: 20px; }
+  .panel {
+    background: #171a21;
+    border: 1px solid #2a2e38;
+    border-radius: 8px;
+    padding: 16px 18px;
+    margin-bottom: 16px;
+  }
+  .config-grid {
+    display: grid;
+    grid-template-columns: 140px 1fr;
+    gap: 8px 12px;
+    align-items: center;
+  }
+  .config-grid label { font-size: 12px; color: #aaa; }
+  input[type=text], textarea {
+    width: 100%;
+    background: #0f1115;
+    border: 1px solid #333944;
+    color: #e6e6e6;
+    border-radius: 4px;
+    padding: 6px 8px;
+    font-family: ui-monospace, Consolas, monospace;
+    font-size: 12px;
+  }
+  textarea { min-height: 90px; resize: vertical; }
+  button {
+    background: #2b6cb0;
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    padding: 8px 16px;
+    font-size: 13px;
+    cursor: pointer;
+    margin-top: 10px;
+    margin-right: 8px;
+  }
+  button:hover { background: #3a7fca; }
+  button.secondary { background: #333944; }
+  button.secondary:hover { background: #444b58; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td {
+    text-align: left;
+    padding: 6px 8px;
+    border-bottom: 1px solid #22262f;
+    white-space: nowrap;
+  }
+  th { color: #9fd3ff; font-weight: 600; }
+  .kv { display: grid; grid-template-columns: 220px 1fr; gap: 4px 12px; font-size: 13px; }
+  .kv div.k { color: #9fd3ff; }
+  .kv div.v { font-family: ui-monospace, Consolas, monospace; word-break: break-all; }
+  .ok { color: #4ade80; }
+  .bad { color: #f87171; }
+  .muted { color: #666; }
+  #status { font-size: 12px; margin-top: 8px; min-height: 16px; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 900px) { .grid2 { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+
+<h1>Energy Trading — Chain Viewer</h1>
+<div class="sub">Reine Lese-Ansicht auf OracleStorage &amp; P2PEnergyMarket via RPC — kein MetaMask nötig. Haushalte werden direkt on-chain gelesen.</div>
+
+<div class="panel">
+  <h2>Konfiguration</h2>
+  <div class="config-grid">
+    <label>RPC URL</label>
+    <input type="text" id="cfgRpc">
+
+    <label>OracleStorage</label>
+    <input type="text" id="cfgOracle">
+
+    <label>P2PEnergyMarket</label>
+    <input type="text" id="cfgMarket">
+
+    <label>Stablecoin</label>
+    <input type="text" id="cfgStablecoin">
+
+    <label>Bekannte Haushalte (JSON)</label>
+    <textarea id="cfgHouseholds"></textarea>
+  </div>
+  <div class="muted" style="font-size:12px; margin-top:6px;">
+    Oracle hat keine Enumerationsfunktion — Haushalte, die nur im Oracle Daten melden aber nicht im Market registriert sind, lassen sich nur über diese Liste finden. Wird automatisch mit market.getAllHouseholds() vereinigt.
+  </div>
+  <button onclick="saveConfigAndRefresh()">Speichern &amp; Aktualisieren</button>
+  <button class="secondary" onclick="resetConfig()">Auf Defaults zurücksetzen</button>
+  <div id="status" class="muted">Lade…</div>
+</div>
+
+<div class="grid2">
+
+  <div class="panel">
+    <h2>OracleStorage</h2>
+    <div class="kv" id="oracleKv"></div>
+    <h2 style="margin-top:16px">Wetter (letzter Slot)</h2>
+    <div class="kv" id="weatherKv"></div>
+  </div>
+
+  <div class="panel">
+    <h2>P2PEnergyMarket</h2>
+    <div class="kv" id="marketKv"></div>
+    <button onclick="testSettleSlot()">settleSlot() simulieren (call, keine TX)</button>
+    <div id="settleResult" class="muted" style="margin-top:8px"></div>
+  </div>
+
+</div>
+
+<div class="panel">
+  <h2>Haushalte <span class="muted" style="font-weight:400; font-size:12px;">— bekannte Liste ∪ Market.getAllHouseholds()</span></h2>
+  <table id="householdsTable">
+    <thead>
+      <tr>
+        <th>ID</th><th>Adresse</th>
+        <th>Oracle reg.</th><th>Market reg.</th>
+        <th>Verbrauch (Wh)</th><th>Produktion (Wh)</th><th>Meter-Zeit</th>
+        <th>SoC %</th><th>Kapazität (Wh)</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+  <div id="householdsStatus" class="muted" style="margin-top:8px"></div>
+</div>
+
+<script>
+const DEFAULTS = {
+  rpc: "https://ethereum-sepolia-rpc.publicnode.com",
+  oracle: "0x4ffCeC76fe299E485ee3B4E4f36ce1694D131917",
+  market: "0xfd1e623BF84c1977bEDbDA57eF6FacCf3b1beB46",
+  stablecoin: "0x4BaBBaE33998fEd65Ada53bc41CeAa3Cde7F7B46",
+  households: [
+    { id: "house_01", address: "0x88CFeA9Cac2DabF1da5Af8c339e652b0e129Bd2E" },
+    { id: "house_02", address: "0x1c5fB3b3abe290003bA31C447c4Bb0957CfC12A9" },
+    { id: "house_03", address: "0x6AA82D8222147B1146afb4b54AA8B4bA77534C2B" }
+  ]
+};
+
+const ORACLE_ABI = [
+  {"inputs":[{"internalType":"address","name":"household","type":"address"}],"name":"getLatestMeterReading","outputs":[{"components":[{"internalType":"uint256","name":"consumptionWh","type":"uint256"},{"internalType":"uint256","name":"productionWh","type":"uint256"},{"internalType":"uint256","name":"timestamp","type":"uint256"}],"internalType":"struct IOracleStorage.MeterReading","name":"","type":"tuple"}],"stateMutability":"view","type":"function"},
+  {"inputs":[{"internalType":"address","name":"household","type":"address"}],"name":"getLatestBatteryState","outputs":[{"components":[{"internalType":"uint256","name":"socPercent","type":"uint256"},{"internalType":"uint256","name":"capacityWh","type":"uint256"},{"internalType":"uint256","name":"maxRateWh","type":"uint256"},{"internalType":"uint256","name":"timestamp","type":"uint256"}],"internalType":"struct IOracleStorage.BatteryState","name":"","type":"tuple"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"getLatestWeather","outputs":[{"components":[{"internalType":"uint256","name":"irradianceWm2","type":"uint256"},{"internalType":"int256","name":"temperatureC","type":"int256"},{"internalType":"uint256","name":"cloudCover","type":"uint256"},{"internalType":"uint256","name":"timestamp","type":"uint256"}],"internalType":"struct IOracleStorage.WeatherData","name":"","type":"tuple"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"getCurrentSlot","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[{"internalType":"address","name":"household","type":"address"}],"name":"isHouseholdRegistered","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"owner","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"startTimestamp","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"SLOT_DURATION","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[{"internalType":"address","name":"","type":"address"}],"name":"authorizedOracles","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"view","type":"function"}
+];
+
+const MARKET_ABI = [
+  {"inputs":[],"name":"owner","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"stablecoin","outputs":[{"internalType":"contract IEnergyStablecoin","name":"","type":"address"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"oracle","outputs":[{"internalType":"contract IOracleStorage","name":"","type":"address"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"energyPricePerKwh","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"lastSettledSlot","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"batteryManager","outputs":[{"internalType":"contract IBatteryManager","name":"","type":"address"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"incentiveController","outputs":[{"internalType":"contract IIncentiveController","name":"","type":"address"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"getHouseholdCount","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"getAllHouseholds","outputs":[{"internalType":"address[]","name":"","type":"address[]"}],"stateMutability":"view","type":"function"},
+  {"inputs":[{"internalType":"address","name":"","type":"address"}],"name":"isRegistered","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"settleSlot","outputs":[],"stateMutability":"nonpayable","type":"function"}
+];
+
+const ZERO = "0x0000000000000000000000000000000000000000";
+const $ = id => document.getElementById(id);
+const short = a => a ? a.slice(0,6) + "…" + a.slice(-4) : "-";
+const fmtTs = ts => Number(ts) === 0 ? "-" : new Date(Number(ts) * 1000).toLocaleString("de-CH");
+const wei6 = v => (Number(v) / 1e6).toFixed(6);
+
+function loadConfig() {
+  let saved = null;
+  try { saved = JSON.parse(localStorage.getItem("chainViewerConfig")); } catch (e) {}
+  const cfg = saved || DEFAULTS;
+  $("cfgRpc").value = cfg.rpc;
+  $("cfgOracle").value = cfg.oracle;
+  $("cfgMarket").value = cfg.market;
+  $("cfgStablecoin").value = cfg.stablecoin;
+  $("cfgHouseholds").value = JSON.stringify(cfg.households || DEFAULTS.households, null, 2);
+  return cfg;
+}
+
+function resetConfig() {
+  localStorage.removeItem("chainViewerConfig");
+  loadConfig();
+  refresh();
+}
+
+function readConfigFromForm() {
+  return {
+    rpc: $("cfgRpc").value.trim(),
+    oracle: $("cfgOracle").value.trim(),
+    market: $("cfgMarket").value.trim(),
+    stablecoin: $("cfgStablecoin").value.trim(),
+    households: JSON.parse($("cfgHouseholds").value)
+  };
+}
+
+function saveConfigAndRefresh() {
+  try {
+    const cfg = readConfigFromForm();
+    localStorage.setItem("chainViewerConfig", JSON.stringify(cfg));
+    refresh();
+  } catch (e) {
+    $("status").innerHTML = `<span class="bad">Ungültiges JSON in "Bekannte Haushalte": ${e.message}</span>`;
+  }
+}
+
+function kvRow(container, key, value, cls) {
+  const k = document.createElement("div"); k.className = "k"; k.textContent = key;
+  const v = document.createElement("div"); v.className = "v" + (cls ? " " + cls : ""); v.textContent = value;
+  container.appendChild(k); container.appendChild(v);
+}
+
+async function refresh() {
+  $("status").textContent = "Lade…";
+  $("householdsStatus").textContent = "";
+  let cfg;
+  try { cfg = readConfigFromForm(); } catch (e) {
+    $("status").innerHTML = `<span class="bad">Ungültiges JSON in "Bekannte Haushalte": ${e.message}</span>`;
+    return;
+  }
+
+  const web3 = new Web3(new Web3.providers.HttpProvider(cfg.rpc));
+  const oracle = new web3.eth.Contract(ORACLE_ABI, cfg.oracle);
+  const market = new web3.eth.Contract(MARKET_ABI, cfg.market);
+
+  try {
+    const [
+      oOwner, currentSlot, startTs, slotDuration, weather,
+      mOwner, mStablecoin, mOracle, price, lastSettled,
+      battMgr, incCtrl, hhCount, allHouseholds
+    ] = await Promise.all([
+      oracle.methods.owner().call(),
+      oracle.methods.getCurrentSlot().call(),
+      oracle.methods.startTimestamp().call(),
+      oracle.methods.SLOT_DURATION().call(),
+      oracle.methods.getLatestWeather().call(),
+      market.methods.owner().call(),
+      market.methods.stablecoin().call(),
+      market.methods.oracle().call(),
+      market.methods.energyPricePerKwh().call(),
+      market.methods.lastSettledSlot().call(),
+      market.methods.batteryManager().call(),
+      market.methods.incentiveController().call(),
+      market.methods.getHouseholdCount().call(),
+      market.methods.getAllHouseholds().call()
+    ]);
+
+    const oracleKv = $("oracleKv"); oracleKv.innerHTML = "";
+    kvRow(oracleKv, "Adresse", cfg.oracle);
+    kvRow(oracleKv, "Owner", oOwner);
+    kvRow(oracleKv, "Current Slot", currentSlot);
+    kvRow(oracleKv, "Start", fmtTs(startTs));
+    kvRow(oracleKv, "Slot-Dauer", slotDuration + "s");
+
+    const weatherKv = $("weatherKv"); weatherKv.innerHTML = "";
+    kvRow(weatherKv, "Strahlung", weather.irradianceWm2 + " W/m²");
+    kvRow(weatherKv, "Temperatur", (Number(weather.temperatureC) / 10).toFixed(1) + " °C");
+    kvRow(weatherKv, "Bewölkung", weather.cloudCover + " %");
+    kvRow(weatherKv, "Zeit", fmtTs(weather.timestamp));
+
+    const marketKv = $("marketKv"); marketKv.innerHTML = "";
+    kvRow(marketKv, "Adresse", cfg.market);
+    kvRow(marketKv, "Owner", mOwner);
+    kvRow(marketKv, "Stablecoin", mStablecoin, mStablecoin.toLowerCase() === cfg.stablecoin.toLowerCase() ? "ok" : "bad");
+    kvRow(marketKv, "Oracle", mOracle, mOracle.toLowerCase() === cfg.oracle.toLowerCase() ? "ok" : "bad");
+    kvRow(marketKv, "Preis / kWh", wei6(price) + " Token (" + price + " units)");
+    kvRow(marketKv, "Last Settled Slot", lastSettled);
+    kvRow(marketKv, "BatteryManager", battMgr === ZERO ? "— nicht gesetzt (Phase 2)" : battMgr, battMgr === ZERO ? "muted" : "ok");
+    kvRow(marketKv, "IncentiveController", incCtrl === ZERO ? "— nicht gesetzt (Phase 3)" : incCtrl, incCtrl === ZERO ? "muted" : "ok");
+    kvRow(marketKv, "Registrierte Haushalte", hhCount);
+
+    $("status").innerHTML = `<span class="ok">Aktualisiert: ${new Date().toLocaleTimeString("de-CH")}</span>`;
+
+    // Oracle hat keine Enumerationsfunktion. Nur im Market registrierte Haushalte
+    // lassen sich über getAllHouseholds() automatisch finden. Haushalte, die nur
+    // im Oracle Daten melden (noch nicht im Market registriert), kennen wir nur
+    // über die manuell gepflegte Liste — daher: Union aus beiden Quellen.
+    await loadHouseholds(oracle, market, cfg.households, allHouseholds);
+
+  } catch (e) {
+    console.error(e);
+    $("status").innerHTML = `<span class="bad">Fehler beim Laden: ${e.message}</span>`;
+  }
+}
+
+function mergeHouseholds(known, onChain) {
+  const byAddress = new Map();
+  (known || []).forEach(h => {
+    if (h && h.address) byAddress.set(h.address.toLowerCase(), { id: h.id || short(h.address), address: h.address });
+  });
+  (onChain || []).forEach(addr => {
+    const key = addr.toLowerCase();
+    if (!byAddress.has(key)) byAddress.set(key, { id: short(addr), address: addr });
+  });
+  return Array.from(byAddress.values());
+}
+
+async function loadHouseholds(oracle, market, knownHouseholds, onChainAddresses) {
+  const tbody = document.querySelector("#householdsTable tbody");
+  tbody.innerHTML = "";
+
+  const households = mergeHouseholds(knownHouseholds, onChainAddresses);
+
+  if (households.length === 0) {
+    $("householdsStatus").innerHTML = `<span class="muted">Keine Haushalte bekannt — weder in der Liste noch im Market registriert.</span>`;
+    return;
+  }
+
+  $("householdsStatus").textContent = `Lade ${households.length} Haushalt(e)…`;
+
+  try {
+    const rows = await Promise.all(households.map(async (h) => {
+      const [oracleReg, marketReg, meter, batt] = await Promise.all([
+        oracle.methods.isHouseholdRegistered(h.address).call(),
+        market.methods.isRegistered(h.address).call(),
+        oracle.methods.getLatestMeterReading(h.address).call(),
+        oracle.methods.getLatestBatteryState(h.address).call()
+      ]);
+      return { ...h, oracleReg, marketReg, meter, batt };
+    }));
+
+    for (const r of rows) {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${r.id}</td>
+        <td title="${r.address}">${short(r.address)}</td>
+        <td class="${r.oracleReg ? "ok" : "bad"}">${r.oracleReg ? "✓" : "✗"}</td>
+        <td class="${r.marketReg ? "ok" : "bad"}">${r.marketReg ? "✓" : "✗"}</td>
+        <td>${r.meter.consumptionWh}</td>
+        <td>${r.meter.productionWh}</td>
+        <td>${fmtTs(r.meter.timestamp)}</td>
+        <td>${r.batt.capacityWh > 0 ? r.batt.socPercent + "%" : "-"}</td>
+        <td>${r.batt.capacityWh > 0 ? r.batt.capacityWh : "-"}</td>
+      `;
+      tbody.appendChild(tr);
+    }
+
+    $("householdsStatus").innerHTML = `<span class="ok">${rows.length} Haushalt(e) geladen (${rows.filter(r=>r.marketReg).length} davon im Market registriert).</span>`;
+  } catch (e) {
+    console.error(e);
+    $("householdsStatus").innerHTML = `<span class="bad">Fehler beim Laden der Haushaltsdaten: ${e.message}</span>`;
+  }
+}
+
+async function testSettleSlot() {
+  $("settleResult").textContent = "Simuliere…";
+  try {
+    const cfg = readConfigFromForm();
+    const web3 = new Web3(new Web3.providers.HttpProvider(cfg.rpc));
+    const market = new web3.eth.Contract(MARKET_ABI, cfg.market);
+    await market.methods.settleSlot().call();
+    $("settleResult").innerHTML = `<span class="ok">✓ Würde ohne Revert durchlaufen.</span>`;
+  } catch (e) {
+    $("settleResult").innerHTML = `<span class="bad">✗ Revertiert: ${e.message}</span>`;
+  }
+}
+
+loadConfig();
+refresh();
+</script>
+
+</body>
+</html>

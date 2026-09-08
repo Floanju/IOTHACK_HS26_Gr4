@@ -61,7 +61,7 @@ def deploy(contract_name: str, constructor_args: list):
     print(f"  Deployer: {account.address}")
     print(f"  Args: {constructor_args}")
 
-    nonce = w3.eth.get_transaction_count(account.address)
+    nonce = w3.eth.get_transaction_count(account.address, "pending")
     tx = contract.constructor(*constructor_args).build_transaction({
         "from": account.address,
         "nonce": nonce,

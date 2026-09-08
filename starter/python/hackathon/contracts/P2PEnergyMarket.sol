@@ -61,13 +61,22 @@ contract P2PEnergyMarket {
     // ─────────────────────────────────────────────────────────────
 
     event HouseholdRegistered(address indexed household);
-    /// @notice Konsument hat für den Slot in den Pool eingezahlt.
-    event EnergyBought(address indexed consumer, uint256 energyWh, uint256 amountPaid, uint256 slot);
-    /// @notice Produzent wurde für den Slot aus dem Pool ausbezahlt.
-    event EnergySold(address indexed producer, uint256 energyWh, uint256 amountReceived, uint256 slot);
-    /// @notice Auszahlung an Produzent fehlgeschlagen (z.B. Compliance-Sperre beim Stablecoin) -
-    ///         restliche Haushalte werden trotzdem abgerechnet, Betrag bleibt im Contract.
-    event PayoutFailed(address indexed producer, uint256 energyWh, uint256 amount, uint256 slot);
+    event EnergyTraded(
+        address indexed producer,
+        address indexed consumer,
+        uint256 energyWh,
+        uint256 amountPaid,
+        uint256 slot
+    );
+    /// @notice Direkter Transfer zwischen Produzent und Konsument fehlgeschlagen
+    ///         (z.B. Compliance-Sperre beim Stablecoin) - restliche Matches laufen weiter.
+    event TradeFailed(
+        address indexed producer,
+        address indexed consumer,
+        uint256 energyWh,
+        uint256 amount,
+        uint256 slot
+    );
     event SlotSettled(uint256 indexed slot, uint256 totalEnergyTraded, uint256 totalPaid);
     event PriceUpdated(uint256 newPricePerKwh);
     event BatteryManagerUpdated(address indexed batteryManager);
@@ -139,10 +148,13 @@ contract P2PEnergyMarket {
      * @notice Rechnet einen Slot ab: matched Produzenten mit Konsumenten,
      *         transferiert Stablecoin entsprechend.
      */
-    /// @dev Pool-Ansatz statt paarweisem Matching: Konsumenten zahlen proportional
-    ///      zu ihrem Anteil am gehandelten Defizit in den Contract ein, Produzenten
-    ///      werden proportional zu ihrem Anteil am gehandelten Überschuss ausbezahlt.
-    ///      Dadurch max. 1 Transfer pro Haushalt statt bis zu N×M Transfers.
+    /// @dev Sweep-Matching statt Pool: Produzenten und Konsumenten werden je
+    ///      absteigend nach Überschuss/Defizit sortiert, dann wird der groesste
+    ///      Konsument der Reihe nach (groesster zuerst) direkt mit Produzenten
+    ///      verrechnet, bis sein Defizit gedeckt ist - danach der naechste
+    ///      Konsument, usw. Direkte Konsument->Produzent-Transfers (kein Pool
+    ///      im Contract selbst): manche Stablecoins mit Compliance/Whitelisting
+    ///      lassen Transfers an den Contract als Zwischenspeicher nicht zu.
     function settleSlot() external {
         uint256 slot = oracle.getCurrentSlot();
         require(slot > lastSettledSlot, "Slot already settled");
@@ -151,16 +163,32 @@ contract P2PEnergyMarket {
         require(n > 0, "No households registered");
 
         (int256[] memory netto, uint256 totalSurplusWh, uint256 totalDeficitWh) = _collectNetto(n);
-        uint256 matchedEnergyWh = totalSurplusWh < totalDeficitWh ? totalSurplusWh : totalDeficitWh;
 
+        uint256 totalEnergyTraded = 0;
         uint256 totalPaid = 0;
-        if (matchedEnergyWh > 0) {
-            totalPaid = _settleConsumers(netto, n, matchedEnergyWh, totalDeficitWh, slot);
-            _settleProducers(netto, n, matchedEnergyWh, totalSurplusWh, slot);
+        if (totalSurplusWh > 0 && totalDeficitWh > 0) {
+            (totalEnergyTraded, totalPaid) = _buildListsAndMatch(netto, n, slot);
         }
 
         lastSettledSlot = slot;
-        emit SlotSettled(slot, matchedEnergyWh, totalPaid);
+        emit SlotSettled(slot, totalEnergyTraded, totalPaid);
+    }
+
+    /// @dev Baut Produzenten-/Konsumentenlisten und fuehrt den Sweep-Match aus -
+    ///      ausgelagert aus settleSlot(), sonst "stack too deep" durch zu viele Locals.
+    function _buildListsAndMatch(int256[] memory netto, uint256 n, uint256 slot)
+        internal
+        returns (uint256 totalEnergyTraded, uint256 totalPaid)
+    {
+        (address[] memory producers, uint256[] memory producerAmounts, uint256 producerCount) =
+            _buildProducerList(netto, n);
+        (address[] memory consumers, uint256[] memory consumerAmounts, uint256 consumerCount) =
+            _buildConsumerList(netto, n);
+        return _sweepMatch(
+            producers, producerAmounts, producerCount,
+            consumers, consumerAmounts, consumerCount,
+            slot
+        );
     }
 
     /// @dev Liest Meter-Daten + optionale Batterie-Entscheidung und berechnet
@@ -198,65 +226,106 @@ contract P2PEnergyMarket {
         }
     }
 
-    /// @dev Pass 1: Konsumenten zahlen proportional zu ihrem Defizit-Anteil in den Pool ein.
-    function _settleConsumers(
-        int256[] memory netto,
-        uint256 n,
-        uint256 matchedEnergyWh,
-        uint256 totalDeficitWh,
-        uint256 slot
-    ) internal returns (uint256 totalPaid) {
+    /// @dev Baut die Liste der Produzenten (netto > 0) und sortiert sie absteigend
+    ///      nach Überschuss (Insertion Sort - bei wenigen Haushalten vernachlässigbare Gaskosten).
+    function _buildProducerList(int256[] memory netto, uint256 n)
+        internal
+        view
+        returns (address[] memory addrs, uint256[] memory amounts, uint256 count)
+    {
+        addrs = new address[](n);
+        amounts = new uint256[](n);
+
         for (uint256 i = 0; i < n; i++) {
-            if (netto[i] >= 0) continue;
-
-            address consumer = households[i];
-            uint256 deficitWh = uint256(-netto[i]);
-            uint256 boughtWh = (deficitWh * matchedEnergyWh) / totalDeficitWh;
-            if (boughtWh == 0) continue;
-
-            uint256 pricePerKwh = energyPricePerKwh;
-            if (address(incentiveController) != address(0)) {
-                uint256 multiplier = incentiveController.getPriceMultiplier(consumer);
-                pricePerKwh = (energyPricePerKwh * multiplier) / 1000;
+            if (netto[i] > 0) {
+                addrs[count] = households[i];
+                amounts[count] = uint256(netto[i]);
+                count++;
             }
-            uint256 amount = (boughtWh * pricePerKwh) / 1000;
+        }
+        _sortDescending(addrs, amounts, count);
+    }
 
-            require(stablecoin.transferFrom(consumer, address(this), amount), "Payment failed");
-            totalPaid += amount;
-            emit EnergyBought(consumer, boughtWh, amount, slot);
+    /// @dev Baut die Liste der Konsumenten (netto < 0) und sortiert sie absteigend nach Defizit.
+    function _buildConsumerList(int256[] memory netto, uint256 n)
+        internal
+        view
+        returns (address[] memory addrs, uint256[] memory amounts, uint256 count)
+    {
+        addrs = new address[](n);
+        amounts = new uint256[](n);
+
+        for (uint256 i = 0; i < n; i++) {
+            if (netto[i] < 0) {
+                addrs[count] = households[i];
+                amounts[count] = uint256(-netto[i]);
+                count++;
+            }
+        }
+        _sortDescending(addrs, amounts, count);
+    }
+
+    /// @dev Insertion Sort absteigend, addrs und amounts bleiben zueinander zugeordnet.
+    function _sortDescending(address[] memory addrs, uint256[] memory amounts, uint256 count) internal pure {
+        for (uint256 i = 1; i < count; i++) {
+            uint256 amt = amounts[i];
+            address addr = addrs[i];
+            uint256 j = i;
+            while (j > 0 && amounts[j - 1] < amt) {
+                amounts[j] = amounts[j - 1];
+                addrs[j] = addrs[j - 1];
+                j--;
+            }
+            amounts[j] = amt;
+            addrs[j] = addr;
         }
     }
 
-    /// @dev Pass 2: Produzenten werden proportional zu ihrem Überschuss-Anteil aus dem Pool ausbezahlt.
-    function _settleProducers(
-        int256[] memory netto,
-        uint256 n,
-        uint256 matchedEnergyWh,
-        uint256 totalSurplusWh,
+    /// @dev Berechnet den Token-Betrag für einen Konsumenten inkl. optionalem Incentive-Multiplikator.
+    function _computeTradeAmount(address consumer, uint256 energyWh) internal view returns (uint256) {
+        uint256 pricePerKwh = energyPricePerKwh;
+        if (address(incentiveController) != address(0)) {
+            uint256 multiplier = incentiveController.getPriceMultiplier(consumer);
+            pricePerKwh = (energyPricePerKwh * multiplier) / 1000;
+        }
+        return (energyWh * pricePerKwh) / 1000;
+    }
+
+    /// @dev Zwei-Zeiger-Sweep: groesster Produzent mit groesstem Konsument zuerst,
+    ///      Direkttransfer Konsument->Produzent, bis eine Seite aufgebraucht ist,
+    ///      dann naechster Eintrag auf dieser Seite. Kein Pooling im Contract.
+    function _sweepMatch(
+        address[] memory producers,
+        uint256[] memory producerAmounts,
+        uint256 producerCount,
+        address[] memory consumers,
+        uint256[] memory consumerAmounts,
+        uint256 consumerCount,
         uint256 slot
-    ) internal {
-        for (uint256 i = 0; i < n; i++) {
-            if (netto[i] <= 0) continue;
+    ) internal returns (uint256 totalEnergyTraded, uint256 totalPaid) {
+        uint256 i = 0;
+        uint256 j = 0;
 
-            address producer = households[i];
-            uint256 surplusWh = uint256(netto[i]);
-            uint256 soldWh = (surplusWh * matchedEnergyWh) / totalSurplusWh;
-            if (soldWh == 0) continue;
+        while (i < producerCount && j < consumerCount) {
+            uint256 matchedWh = producerAmounts[i] < consumerAmounts[j] ? producerAmounts[i] : consumerAmounts[j];
+            uint256 amount = _computeTradeAmount(consumers[j], matchedWh);
 
-            uint256 amount = calculateCost(soldWh);
-
-            // try/catch statt require: ein Compliance-bedingter Fehlschlag bei einem
-            // Produzenten (z.B. Stablecoin-Blacklist) soll nicht den ganzen Slot für
-            // alle anderen Haushalte blockieren. Der Betrag bleibt im Contract stehen.
-            try stablecoin.transfer(producer, amount) returns (bool success) {
+            try stablecoin.transferFrom(consumers[j], producers[i], amount) returns (bool success) {
                 if (success) {
-                    emit EnergySold(producer, soldWh, amount, slot);
+                    emit EnergyTraded(producers[i], consumers[j], matchedWh, amount, slot);
+                    totalEnergyTraded += matchedWh;
+                    totalPaid += amount;
                 } else {
-                    emit PayoutFailed(producer, soldWh, amount, slot);
+                    emit TradeFailed(producers[i], consumers[j], matchedWh, amount, slot);
                 }
             } catch {
-                emit PayoutFailed(producer, soldWh, amount, slot);
+                emit TradeFailed(producers[i], consumers[j], matchedWh, amount, slot);
             }
+
+            producerAmounts[i] -= matchedWh;
+            consumerAmounts[j] -= matchedWh;
+            if (producerAmounts[i] == 0) i++;
+            if (consumerAmounts[j] == 0) j++;
         }
     }
 

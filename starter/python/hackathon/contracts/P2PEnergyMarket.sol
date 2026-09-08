@@ -61,13 +61,13 @@ contract P2PEnergyMarket {
     // ─────────────────────────────────────────────────────────────
 
     event HouseholdRegistered(address indexed household);
-    event EnergyTraded(
-        address indexed producer,
-        address indexed consumer,
-        uint256 energyWh,
-        uint256 amountPaid,
-        uint256 slot
-    );
+    /// @notice Konsument hat für den Slot in den Pool eingezahlt.
+    event EnergyBought(address indexed consumer, uint256 energyWh, uint256 amountPaid, uint256 slot);
+    /// @notice Produzent wurde für den Slot aus dem Pool ausbezahlt.
+    event EnergySold(address indexed producer, uint256 energyWh, uint256 amountReceived, uint256 slot);
+    /// @notice Auszahlung an Produzent fehlgeschlagen (z.B. Compliance-Sperre beim Stablecoin) -
+    ///         restliche Haushalte werden trotzdem abgerechnet, Betrag bleibt im Contract.
+    event PayoutFailed(address indexed producer, uint256 energyWh, uint256 amount, uint256 slot);
     event SlotSettled(uint256 indexed slot, uint256 totalEnergyTraded, uint256 totalPaid);
     event PriceUpdated(uint256 newPricePerKwh);
     event BatteryManagerUpdated(address indexed batteryManager);
@@ -138,71 +138,126 @@ contract P2PEnergyMarket {
     /**
      * @notice Rechnet einen Slot ab: matched Produzenten mit Konsumenten,
      *         transferiert Stablecoin entsprechend.
-     *
-     *  TODO (Teams):
-     *    1. Hole currentSlot vom Oracle und prüfe, dass er > lastSettledSlot ist
-     *    2. Iteriere über alle households:
-     *       - Lese MeterReading via oracle.getLatestMeterReading()
-     *       - Berechne netto (production - consumption)
-     *       - [Phase 2, optional] Falls batteryManager gesetzt ist (siehe Feld
-     *         oben + setBatteryManager()): passt netto VOR der Klassifizierung
-     *         in Produzent/Konsument an, damit Handel und Batterie-Strategie
-     *         konsistent sind, statt parallel und widersprüchlich zu laufen:
-     *
-     *           if (address(batteryManager) != address(0)
-     *               && batteryManager.isManaged(household)) {
-     *               try batteryManager.decideAction(household)
-     *                   returns (IBatteryManager.Action action, uint256 amountWh) {
-     *                   if (action == IBatteryManager.Action.CHARGE) {
-     *                       netto -= int256(amountWh);   // Haushalt behält Energie für Batterie
-     *                   } else if (action == IBatteryManager.Action.DISCHARGE) {
-     *                       netto += int256(amountWh);   // Batterie liefert zusätzlich Energie
-     *                   }
-     *               } catch {
-     *                   // Batterie-Call fehlgeschlagen -> ignorieren, Handel läuft
-     *                   // ungestört mit dem ursprünglichen netto weiter
-     *               }
-     *           }
-     *
-     *         Wichtig: nicht jeder Haushalt hat zwingend eine verwaltete Batterie
-     *         (z.B. reine Konsumenten) - deshalb zuerst isManaged() prüfen, sonst
-     *         revertet decideAction() und blockiert den ganzen Slot für alle.
-     *         decideAction() wird hier bewusst live innerhalb derselben Transaktion
-     *         aufgerufen (nicht vorher separat getriggert) - so ist garantiert, dass
-     *         die Entscheidung zum selben Slot gehört wie die Meter-Daten, die ihr
-     *         gerade handelt, statt eine veraltete Entscheidung vom Vor-Slot zu lesen.
-     *       - Sammle Überschüsse und Defizite
-     *    3. Matche Produzenten mit Konsumenten
-     *       (einfache Strategie: proportional verteilen)
-     *    4. Pro Match: berechne Betrag = energieWh * effektiverPreisProKwh / 1000
-     *       (Wattstunden -> Kilowattstunden)
-     *       - [Phase 3, optional] Falls incentiveController gesetzt ist (siehe
-     *         Feld oben + setIncentiveController()): passt den Preis für den
-     *         KONSUMENTEN (Käufer) an, bevor ihr den Betrag berechnet:
-     *
-     *           uint256 pricePerKwh = energyPricePerKwh;
-     *           if (address(incentiveController) != address(0)) {
-     *               uint256 multiplier = incentiveController.getPriceMultiplier(consumer);
-     *               pricePerKwh = (energyPricePerKwh * multiplier) / 1000;
-     *           }
-     *
-     *         getPriceMultiplier() ist `view` (kein State-Change) - anders als
-     *         batteryManager.decideAction() oben braucht ihr hier kein try/catch,
-     *         der Call kann nicht versehentlich Storage kaputt machen.
-     *         Multiplikator gilt bewusst für den Konsumenten, nicht den Produzenten
-     *         (siehe IncentiveController.getPriceMultiplier(): 1000=neutral,
-     *         <1000=Rabatt, >1000=Aufschlag - abhängig von dessen eigener
-     *         Prognose-Genauigkeit als "Käufer").
-     *    5. Transferiere via stablecoin.transferFrom(consumer, producer, amount)
-     *       (Konsumenten müssen vorher approve() aufgerufen haben!)
-     *    6. Emit EnergyTraded für jeden Match
-     *    7. Setze lastSettledSlot auf currentSlot
-     *    8. Emit SlotSettled
      */
+    /// @dev Pool-Ansatz statt paarweisem Matching: Konsumenten zahlen proportional
+    ///      zu ihrem Anteil am gehandelten Defizit in den Contract ein, Produzenten
+    ///      werden proportional zu ihrem Anteil am gehandelten Überschuss ausbezahlt.
+    ///      Dadurch max. 1 Transfer pro Haushalt statt bis zu N×M Transfers.
     function settleSlot() external {
-        // TODO: Implementierung durch Team
+        uint256 slot = oracle.getCurrentSlot();
+        require(slot > lastSettledSlot, "Slot already settled");
 
-        revert("Not implemented yet - this is your job!");
+        uint256 n = households.length;
+        require(n > 0, "No households registered");
+
+        (int256[] memory netto, uint256 totalSurplusWh, uint256 totalDeficitWh) = _collectNetto(n);
+        uint256 matchedEnergyWh = totalSurplusWh < totalDeficitWh ? totalSurplusWh : totalDeficitWh;
+
+        uint256 totalPaid = 0;
+        if (matchedEnergyWh > 0) {
+            totalPaid = _settleConsumers(netto, n, matchedEnergyWh, totalDeficitWh, slot);
+            _settleProducers(netto, n, matchedEnergyWh, totalSurplusWh, slot);
+        }
+
+        lastSettledSlot = slot;
+        emit SlotSettled(slot, matchedEnergyWh, totalPaid);
+    }
+
+    /// @dev Liest Meter-Daten + optionale Batterie-Entscheidung und berechnet
+    ///      pro Haushalt den Nettowert sowie die Gesamtsummen Überschuss/Defizit.
+    function _collectNetto(uint256 n)
+        internal
+        returns (int256[] memory netto, uint256 totalSurplusWh, uint256 totalDeficitWh)
+    {
+        netto = new int256[](n);
+
+        for (uint256 i = 0; i < n; i++) {
+            address household = households[i];
+            IOracleStorage.MeterReading memory mr = oracle.getLatestMeterReading(household);
+            int256 net = int256(mr.productionWh) - int256(mr.consumptionWh);
+
+            if (address(batteryManager) != address(0) && batteryManager.isManaged(household)) {
+                try batteryManager.decideAction(household)
+                    returns (IBatteryManager.Action action, uint256 amountWh) {
+                    if (action == IBatteryManager.Action.CHARGE) {
+                        net -= int256(amountWh);
+                    } else if (action == IBatteryManager.Action.DISCHARGE) {
+                        net += int256(amountWh);
+                    }
+                } catch {
+                    // Batterie-Call fehlgeschlagen -> ignorieren, Handel läuft mit ursprünglichem netto weiter
+                }
+            }
+
+            netto[i] = net;
+            if (net > 0) {
+                totalSurplusWh += uint256(net);
+            } else if (net < 0) {
+                totalDeficitWh += uint256(-net);
+            }
+        }
+    }
+
+    /// @dev Pass 1: Konsumenten zahlen proportional zu ihrem Defizit-Anteil in den Pool ein.
+    function _settleConsumers(
+        int256[] memory netto,
+        uint256 n,
+        uint256 matchedEnergyWh,
+        uint256 totalDeficitWh,
+        uint256 slot
+    ) internal returns (uint256 totalPaid) {
+        for (uint256 i = 0; i < n; i++) {
+            if (netto[i] >= 0) continue;
+
+            address consumer = households[i];
+            uint256 deficitWh = uint256(-netto[i]);
+            uint256 boughtWh = (deficitWh * matchedEnergyWh) / totalDeficitWh;
+            if (boughtWh == 0) continue;
+
+            uint256 pricePerKwh = energyPricePerKwh;
+            if (address(incentiveController) != address(0)) {
+                uint256 multiplier = incentiveController.getPriceMultiplier(consumer);
+                pricePerKwh = (energyPricePerKwh * multiplier) / 1000;
+            }
+            uint256 amount = (boughtWh * pricePerKwh) / 1000;
+
+            require(stablecoin.transferFrom(consumer, address(this), amount), "Payment failed");
+            totalPaid += amount;
+            emit EnergyBought(consumer, boughtWh, amount, slot);
+        }
+    }
+
+    /// @dev Pass 2: Produzenten werden proportional zu ihrem Überschuss-Anteil aus dem Pool ausbezahlt.
+    function _settleProducers(
+        int256[] memory netto,
+        uint256 n,
+        uint256 matchedEnergyWh,
+        uint256 totalSurplusWh,
+        uint256 slot
+    ) internal {
+        for (uint256 i = 0; i < n; i++) {
+            if (netto[i] <= 0) continue;
+
+            address producer = households[i];
+            uint256 surplusWh = uint256(netto[i]);
+            uint256 soldWh = (surplusWh * matchedEnergyWh) / totalSurplusWh;
+            if (soldWh == 0) continue;
+
+            uint256 amount = calculateCost(soldWh);
+
+            // try/catch statt require: ein Compliance-bedingter Fehlschlag bei einem
+            // Produzenten (z.B. Stablecoin-Blacklist) soll nicht den ganzen Slot für
+            // alle anderen Haushalte blockieren. Der Betrag bleibt im Contract stehen.
+            try stablecoin.transfer(producer, amount) returns (bool success) {
+                if (success) {
+                    emit EnergySold(producer, soldWh, amount, slot);
+                } else {
+                    emit PayoutFailed(producer, soldWh, amount, slot);
+                }
+            } catch {
+                emit PayoutFailed(producer, soldWh, amount, slot);
+            }
+        }
     }
 
     // ─────────────────────────────────────────────────────────────

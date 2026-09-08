@@ -2,6 +2,7 @@
 pragma solidity ^0.8.20;
 
 /**
+ * 
  * @title IOracleStorage
  * @notice Interface zum Lesen aller Mess- und Wetterdaten.
  * @dev Teams importieren dieses Interface in ihre Contracts und rufen die Getter auf.

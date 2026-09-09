@@ -94,6 +94,11 @@
   #batteryChart { display: block; }
   .chart-legend { display: flex; gap: 16px; font-size: 12px; color: #aaa; margin-top: 6px; flex-wrap: wrap; }
   .chart-legend span.dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 4px; vertical-align: middle; }
+
+  /* Einklappbare Haushalts-Charts (natives <details>, keine JS-Toggle-Logik nötig) */
+  .chart-card { margin-bottom: 12px; }
+  .chart-card > summary { font-size: 15px; color: #9fd3ff; cursor: pointer; }
+  .chart-card[open] > summary { margin-bottom: 10px; }
 </style>
 </head>
 <body>
@@ -162,6 +167,26 @@
 </div>
 
 <div class="panel">
+  <h2>Verbrauch &amp; Produktion <span class="muted" style="font-weight:400; font-size:12px;">— pro Haushalt, aus OracleStorage.MeterUpdated-Events</span></h2>
+
+  <div class="config-grid" style="grid-template-columns: 80px 1fr 80px 1fr; margin-bottom: 6px;">
+    <label>Von</label>
+    <input type="datetime-local" id="meterFrom">
+    <label>Bis</label>
+    <input type="datetime-local" id="meterTo">
+  </div>
+  <div class="muted" style="font-size:12px; margin-bottom:10px;">
+    Zeitraum für die Diagramme unten. Begrenzt durch die vom RPC pro Abfrage erlaubte Blockspanne — bei sehr grossen Zeiträumen können ältere Events fehlen.
+  </div>
+
+  <button onclick="loadMeterHistory()">Verlauf laden / aktualisieren</button>
+  <button class="secondary" onclick="setMeterRangePreset(24)">Letzte 24h</button>
+  <button class="secondary" onclick="setMeterRangePreset(24 * 7)">Letzte 7 Tage</button>
+  <div id="meterHistoryStatus" class="muted" style="margin-top:8px"></div>
+  <div id="meterCharts" style="margin-top:12px;"></div>
+</div>
+
+<div class="panel">
   <h2>BatteryManager <span class="muted" style="font-weight:400; font-size:12px;">— Phase 2, Batterie-Ladezyklen</span></h2>
   <div class="kv" id="batteryKv"></div>
   <div id="batteryStatus" class="muted" style="margin-top:8px"></div>
@@ -221,7 +246,18 @@ const ORACLE_ABI = [
   {"inputs":[],"name":"owner","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},
   {"inputs":[],"name":"startTimestamp","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
   {"inputs":[],"name":"SLOT_DURATION","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
-  {"inputs":[{"internalType":"address","name":"","type":"address"}],"name":"authorizedOracles","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"view","type":"function"}
+  {"inputs":[{"internalType":"address","name":"","type":"address"}],"name":"authorizedOracles","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"view","type":"function"},
+  {
+    "anonymous": false,
+    "inputs": [
+      {"indexed": true, "internalType": "address", "name": "household", "type": "address"},
+      {"indexed": false, "internalType": "uint256", "name": "slot", "type": "uint256"},
+      {"indexed": false, "internalType": "uint256", "name": "consumption", "type": "uint256"},
+      {"indexed": false, "internalType": "uint256", "name": "production", "type": "uint256"}
+    ],
+    "name": "MeterUpdated",
+    "type": "event"
+  }
 ];
 
 const MARKET_ABI = [
@@ -269,6 +305,38 @@ const short = a => a ? a.slice(0,6) + "…" + a.slice(-4) : "-";
 const fmtTs = ts => Number(ts) === 0 ? "-" : new Date(Number(ts) * 1000).toLocaleString("de-CH");
 const wei6 = v => (Number(v) / 1e6).toFixed(6);
 
+// Adresse (lowercase) -> bekannte Haushalts-ID, für Anzeige/Tooltips
+const addressIdMap = households => new Map(households.map(h => [h.address.toLowerCase(), h.id]));
+
+// Kompakte SVG-Element-Erzeugung: svgEl("line", {x1, y1, ...})
+const SVG_NS = "http://www.w3.org/2000/svg";
+function svgEl(tag, attrs) {
+  const el = document.createElementNS(SVG_NS, tag);
+  for (const k in attrs) el.setAttribute(k, attrs[k]);
+  return el;
+}
+
+// Events per getPastEvents laden — mit Fallback auf kleinere Blockspanne,
+// da manche RPCs nur begrenzte Ranges pro Abfrage erlauben.
+async function fetchRecentEvents(contract, eventName) {
+  const latest = Number(await currentWeb3.eth.getBlockNumber());
+  let fromBlock = Math.max(0, latest - 50000);
+  try {
+    return { events: await contract.getPastEvents(eventName, { fromBlock, toBlock: "latest" }), fromBlock };
+  } catch (err) {
+    console.warn(`getPastEvents(${eventName}) mit grosser Range fehlgeschlagen, versuche kleinere Range:`, err.message);
+    fromBlock = Math.max(0, latest - 5000);
+    return { events: await contract.getPastEvents(eventName, { fromBlock, toBlock: "latest" }), fromBlock };
+  }
+}
+
+// Blocknummern der Events -> Timestamp auflösen (dedupliziert)
+async function resolveEventTimestamps(events) {
+  const blockNumbers = [...new Set(events.map(e => e.blockNumber))];
+  const blocks = await Promise.all(blockNumbers.map(bn => currentWeb3.eth.getBlock(bn)));
+  return new Map(blocks.map(b => [b.number, Number(b.timestamp)]));
+}
+
 function actionBadge(actionNum) {
   const idx = Number(actionNum);
   const name = ACTION_NAMES[idx] ?? ("#" + idx);
@@ -279,6 +347,8 @@ function actionBadge(actionNum) {
 // Wird zwischen refresh() und loadBatteryEvents() geteilt, damit der Button
 // nicht die ganze Konfiguration neu parsen/verbinden muss.
 let currentWeb3 = null;
+let currentOracleContract = null;
+let currentHouseholds = []; // [{id, address}]
 let currentBatteryContract = null;
 let currentBatteryHouseholds = []; // [{id, address}]
 
@@ -340,6 +410,7 @@ async function refresh() {
   currentWeb3 = web3;
   const oracle = new web3.eth.Contract(ORACLE_ABI, cfg.oracle);
   const market = new web3.eth.Contract(MARKET_ABI, cfg.market);
+  currentOracleContract = oracle;
 
   try {
     const [
@@ -395,6 +466,9 @@ async function refresh() {
     // über die manuell gepflegte Liste — daher: Union aus beiden Quellen.
     await loadHouseholds(oracle, market, cfg.households, allHouseholds);
 
+    // Verbrauch/Produktion der letzten 24h pro Haushalt (MeterUpdated-Events)
+    await loadMeterHistory();
+
     // Phase 2: BatteryManager — Ladezyklen anzeigen (nur wenn gesetzt)
     await loadBatteryManager(web3, oracle, battMgr, cfg.households, allHouseholds);
 
@@ -421,6 +495,7 @@ async function loadHouseholds(oracle, market, knownHouseholds, onChainAddresses)
   tbody.innerHTML = "";
 
   const households = mergeHouseholds(knownHouseholds, onChainAddresses);
+  currentHouseholds = households;
 
   if (households.length === 0) {
     $("householdsStatus").innerHTML = `<span class="muted">Keine Haushalte bekannt — weder in der Liste noch im Market registriert.</span>`;
@@ -461,6 +536,268 @@ async function loadHouseholds(oracle, market, knownHouseholds, onChainAddresses)
     console.error(e);
     $("householdsStatus").innerHTML = `<span class="bad">Fehler beim Laden der Haushaltsdaten: ${e.message}</span>`;
   }
+}
+
+// ─────────────────────────────────────────────────────────────
+//  Verbrauch & Produktion — wählbarer Zeitraum pro Haushalt (MeterUpdated-Events)
+// ─────────────────────────────────────────────────────────────
+
+function toDatetimeLocal(date) {
+  const pad = n => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+// Setzt Von/Bis-Felder nur, falls noch leer (z.B. beim ersten Laden der Seite),
+// damit eine vom Nutzer gewählte Spanne bei "Speichern & Aktualisieren" erhalten bleibt.
+function initMeterRangeDefaults() {
+  if ($("meterFrom").value && $("meterTo").value) return;
+  setMeterRangePreset(24);
+}
+
+function setMeterRangePreset(hours) {
+  const now = new Date();
+  const from = new Date(now.getTime() - hours * 3600 * 1000);
+  $("meterTo").value = toDatetimeLocal(now);
+  $("meterFrom").value = toDatetimeLocal(from);
+  loadMeterHistory();
+}
+
+function getMeterRange() {
+  const now = Math.floor(Date.now() / 1000);
+  const fromVal = $("meterFrom").value;
+  const toVal = $("meterTo").value;
+  let fromTs = fromVal ? Math.floor(new Date(fromVal).getTime() / 1000) : now - 24 * 3600;
+  let toTs = toVal ? Math.floor(new Date(toVal).getTime() / 1000) : now;
+  if (fromTs > toTs) [fromTs, toTs] = [toTs, fromTs];
+  return { fromTs, toTs };
+}
+
+async function loadMeterHistory() {
+  const statusEl = $("meterHistoryStatus");
+  const container = $("meterCharts");
+
+  if (!currentOracleContract || !currentWeb3) {
+    statusEl.innerHTML = `<span class="muted">Zuerst oben aktualisieren, um mit der Chain zu verbinden.</span>`;
+    return;
+  }
+
+  const { fromTs, toTs } = getMeterRange();
+  statusEl.textContent = "Lade MeterUpdated-Events…";
+
+  try {
+    const { events, fromBlock } = await fetchRecentEvents(currentOracleContract, "MeterUpdated");
+    const tsByBlock = await resolveEventTimestamps(events);
+
+    const enriched = events.map(e => ({
+      timestamp: tsByBlock.get(e.blockNumber) || 0,
+      household: e.returnValues.household,
+      slot: e.returnValues.slot,
+      consumptionWh: Number(e.returnValues.consumption),
+      productionWh: Number(e.returnValues.production)
+    })).filter(e => e.timestamp >= fromTs && e.timestamp <= toTs)
+      .sort((a, b) => a.timestamp - b.timestamp);
+
+    container.innerHTML = "";
+
+    if (enriched.length === 0) {
+      statusEl.innerHTML = `<span class="muted">Keine MeterUpdated-Events im gewählten Zeitraum gefunden (abgefragt ab Block ${fromBlock}). Zeitraum evtl. ausserhalb der vom RPC abfragbaren Blockspanne — kleineren/jüngeren Zeitraum versuchen.</span>`;
+      return;
+    }
+
+    const byHousehold = new Map();
+    for (const e of enriched) {
+      const key = e.household.toLowerCase();
+      if (!byHousehold.has(key)) byHousehold.set(key, []);
+      byHousehold.get(key).push(e);
+    }
+
+    const ids = addressIdMap(currentHouseholds);
+    for (const [addr, evs] of byHousehold.entries()) {
+      const { card, svg } = buildMeterCard(ids.get(addr) || short(addr));
+      container.appendChild(card);
+      drawMeterChart(svg, evs);
+    }
+
+    statusEl.innerHTML = `<span class="ok">${enriched.length} Event(s) über ${byHousehold.size} Haushalt(e) geladen (${new Date(fromTs * 1000).toLocaleString("de-CH")} – ${new Date(toTs * 1000).toLocaleString("de-CH")}, ab Block ${fromBlock}).</span>`;
+
+  } catch (e) {
+    console.error(e);
+    container.innerHTML = "";
+    statusEl.innerHTML = `<span class="bad">Fehler beim Laden der Meter-Events: ${e.message}</span>`;
+  }
+}
+
+// Einklappbare Chart-Karte (natives <details> statt eigener Toggle-Logik/State)
+function buildMeterCard(id) {
+  const card = document.createElement("details");
+  card.className = "panel chart-card";
+  card.open = true;
+
+  const summary = document.createElement("summary");
+  summary.textContent = `${id} — Verbrauch & Produktion`;
+  card.appendChild(summary);
+
+  const svg = svgEl("svg", { style: "width:100%; height:200px; display:block;" });
+  card.appendChild(svg);
+
+  const legend = document.createElement("div");
+  legend.className = "chart-legend";
+  legend.innerHTML = `
+    <span><span class="dot" style="background:#f87171"></span>Verbrauch (Wh)</span>
+    <span><span class="dot" style="background:#4ade80"></span>Produktion (Wh)</span>
+  `;
+  card.appendChild(legend);
+
+  return { card, svg };
+}
+
+/**
+ * Baut aus Punkten einen geglätteten Pfad (Catmull-Rom -> kubische Bézier),
+ * damit Spitzen zwischen Messwerten nicht mehr eckig erscheinen.
+ */
+function smoothPathD(points) {
+  if (points.length === 0) return "";
+  if (points.length === 1) return `M${points[0].x},${points[0].y}`;
+  if (points.length === 2) return `M${points[0].x},${points[0].y} L${points[1].x},${points[1].y}`;
+
+  let d = `M${points[0].x},${points[0].y} `;
+  for (let i = 0; i < points.length - 1; i++) {
+    const p0 = points[i - 1] || points[i];
+    const p1 = points[i];
+    const p2 = points[i + 1];
+    const p3 = points[i + 2] || p2;
+    const cp1x = p1.x + (p2.x - p0.x) / 6;
+    const cp1y = p1.y + (p2.y - p0.y) / 6;
+    const cp2x = p2.x - (p3.x - p1.x) / 6;
+    const cp2y = p2.y - (p3.y - p1.y) / 6;
+    d += `C${cp1x.toFixed(1)},${cp1y.toFixed(1)} ${cp2x.toFixed(1)},${cp2y.toFixed(1)} ${p2.x.toFixed(1)},${p2.y.toFixed(1)} `;
+  }
+  return d;
+}
+
+/**
+ * Teilt Events in zusammenhängende Segmente auf; eine deutlich grössere
+ * Lücke als üblich (kein Datenpunkt gemeldet) trennt ein neues Segment ab —
+ * darüber wird nichts gezeichnet, statt die Lücke zu verbinden.
+ */
+function splitContiguous(events) {
+  if (events.length < 2) return [];
+
+  const diffs = events.slice(1).map((e, i) => e.timestamp - events[i].timestamp);
+  const median = diffs.slice().sort((a, b) => a - b)[Math.floor(diffs.length / 2)] || 60;
+  const gapThreshold = Math.max(median * 1.8, median + 60);
+
+  const segments = [];
+  let current = [events[0]];
+  for (let i = 1; i < events.length; i++) {
+    if (events[i].timestamp - events[i - 1].timestamp > gapThreshold) {
+      if (current.length >= 2) segments.push(current);
+      current = [events[i]];
+    } else {
+      current.push(events[i]);
+    }
+  }
+  if (current.length >= 2) segments.push(current);
+  return segments;
+}
+
+/** Zeitachsen-Ticks auf volle Stunden gerundet, Schrittweite passend zur Spanne. */
+function hourTicks(tMin, tMax, maxTicks) {
+  const steps = [1, 2, 3, 4, 6, 12, 24, 48, 72, 168]; // Stunden
+  const spanH = (tMax - tMin) / 3600;
+  const stepSec = (steps.find(s => spanH / s <= maxTicks) || steps[steps.length - 1]) * 3600;
+
+  const ticks = [];
+  for (let t = Math.ceil(tMin / stepSec) * stepSec; t <= tMax; t += stepSec) ticks.push(t);
+  return ticks.length ? ticks : [tMin, tMax];
+}
+
+function formatHourTick(t, spanSeconds) {
+  const d = new Date(t * 1000);
+  const hh = d.toLocaleTimeString("de-CH", { hour: "2-digit", minute: "2-digit" });
+  if (spanSeconds <= 26 * 3600) return hh;
+  const dd = d.toLocaleDateString("de-CH", { day: "2-digit", month: "2-digit" });
+  return spanSeconds <= 9 * 24 * 3600 ? `${dd} ${hh}` : dd;
+}
+
+/**
+ * Zeichnet Verbrauch (rot) und Produktion (grün) als geglättetes
+ * Liniendiagramm über die Zeit für einen einzelnen Haushalt — ohne
+ * Datenpunkt-Marker; Datenlücken bleiben als Lücke im Graph sichtbar.
+ */
+function drawMeterChart(svg, events) {
+  svg.innerHTML = "";
+
+  // viewBox 1:1 zur tatsächlich gerenderten Breite setzen — sonst skaliert
+  // preserveAspectRatio x und y unterschiedlich stark und Text/Linien wirken verzogen.
+  const width = Math.round(svg.getBoundingClientRect().width) || 900;
+  const height = 200;
+  const padLeft = 54, padRight = 16, padTop = 14, padBottom = 28;
+
+  svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+  svg.style.height = height + "px";
+
+  const tMin = events[0].timestamp;
+  const tMax = events[events.length - 1].timestamp;
+  const tSpan = Math.max(1, tMax - tMin);
+  const maxVal = Math.max(1, ...events.map(e => Math.max(e.consumptionWh, e.productionWh)));
+
+  const xScale = t => padLeft + ((t - tMin) / tSpan) * (width - padLeft - padRight);
+  const yScale = v => height - padBottom - (v / maxVal) * (height - padTop - padBottom);
+
+  // Horizontale Gridlines + Y-Achsen-Beschriftung (0 / 50% / 100%)
+  [0, 0.5, 1].forEach(f => {
+    const y = yScale(maxVal * f);
+    svg.appendChild(svgEl("line", { x1: padLeft, x2: width - padRight, y1: y, y2: y, stroke: "#22262f" }));
+    const label = svgEl("text", { x: padLeft - 8, y: y + 3, fill: "#666", "font-size": 10, "text-anchor": "end" });
+    label.textContent = Math.round(maxVal * f);
+    svg.appendChild(label);
+  });
+
+  // Vertikale Gridlines auf vollen Stunden (Anzahl richtet sich nach verfügbarer Breite)
+  const maxTicks = Math.max(3, Math.floor((width - padLeft - padRight) / 130));
+  const ticks = hourTicks(tMin, tMax, maxTicks);
+  ticks.forEach((t, i) => {
+    const x = xScale(t);
+    svg.appendChild(svgEl("line", { x1: x, x2: x, y1: padTop, y2: height - padBottom, stroke: "#22262f" }));
+    const label = svgEl("text", {
+      x, y: height - 8, fill: "#666", "font-size": 10,
+      "text-anchor": i === 0 ? "start" : i === ticks.length - 1 ? "end" : "middle"
+    });
+    label.textContent = formatHourTick(t, tSpan);
+    svg.appendChild(label);
+  });
+
+  // Sichtbare Achsenlinien (links + unten)
+  svg.appendChild(svgEl("path", {
+    d: `M${padLeft},${padTop} L${padLeft},${height - padBottom} L${width - padRight},${height - padBottom}`,
+    fill: "none", stroke: "#333944"
+  }));
+
+  const segments = splitContiguous(events);
+
+  function addSeries(key, color) {
+    for (const seg of segments) {
+      const pts = seg.map(e => ({ x: xScale(e.timestamp), y: yScale(e[key]) }));
+      svg.appendChild(svgEl("path", {
+        d: smoothPathD(pts), fill: "none", stroke: color,
+        "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round"
+      }));
+    }
+
+    // Unsichtbare, grössere Hover-Ziele statt sichtbarer Punkte (nur Tooltip)
+    events.forEach(e => {
+      const c = svgEl("circle", { cx: xScale(e.timestamp), cy: yScale(e[key]), r: 6, fill: "transparent" });
+      const title = document.createElementNS(SVG_NS, "title");
+      const label = key === "productionWh" ? "Produktion" : "Verbrauch";
+      title.textContent = `${label}: ${e[key]} Wh — Slot ${e.slot} — ${fmtTs(e.timestamp)}`;
+      c.appendChild(title);
+      svg.appendChild(c);
+    });
+  }
+
+  addSeries("productionWh", "#4ade80");
+  addSeries("consumptionWh", "#f87171");
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -565,37 +902,9 @@ async function loadBatteryEvents() {
   tbody.innerHTML = "";
 
   try {
-    const latestBlock = await currentWeb3.eth.getBlockNumber();
-    // Öffentliche RPCs limitieren oft die Blockspanne pro Log-Query.
-    // 50k Blöcke sind auf Sepolia (~12s/Block) ca. 6-7 Tage — für die Demo ausreichend
-    // und meist innerhalb der Provider-Limits.
-    const RANGE = 50000n ? undefined : undefined; // placeholder, siehe unten
-    let fromBlock = 0;
-    const latest = Number(latestBlock);
-    if (latest > 50000) fromBlock = latest - 50000;
-
-    let events;
-    try {
-      events = await currentBatteryContract.getPastEvents("DecisionMade", {
-        fromBlock,
-        toBlock: "latest"
-      });
-    } catch (rangeErr) {
-      // Fallback: manche Provider erlauben nur sehr kleine Ranges -> nochmal enger versuchen
-      console.warn("getPastEvents mit grosser Range fehlgeschlagen, versuche kleinere Range:", rangeErr.message);
-      const smallFrom = Math.max(0, latest - 5000);
-      events = await currentBatteryContract.getPastEvents("DecisionMade", {
-        fromBlock: smallFrom,
-        toBlock: "latest"
-      });
-    }
-
-    // Für Zeitstempel: Blocknummern -> Timestamp auflösen (dedupliziert)
-    const blockNumbers = [...new Set(events.map(e => e.blockNumber))];
-    const blocks = await Promise.all(blockNumbers.map(bn => currentWeb3.eth.getBlock(bn)));
-    const tsByBlock = new Map(blocks.map(b => [b.number, Number(b.timestamp)]));
-
-    const idByAddress = new Map(currentBatteryHouseholds.map(h => [h.address.toLowerCase(), h.id]));
+    const { events, fromBlock } = await fetchRecentEvents(currentBatteryContract, "DecisionMade");
+    const tsByBlock = await resolveEventTimestamps(events);
+    const idByAddress = addressIdMap(currentBatteryHouseholds);
 
     const enriched = events.map(e => ({
       blockNumber: e.blockNumber,
@@ -647,11 +956,7 @@ function drawBatteryChart(events) {
   svg.innerHTML = "";
 
   if (!events || events.length === 0) {
-    const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
-    text.setAttribute("x", 10);
-    text.setAttribute("y", 24);
-    text.setAttribute("fill", "#666");
-    text.setAttribute("font-size", "12");
+    const text = svgEl("text", { x: 10, y: 24, fill: "#666", "font-size": 12 });
     text.textContent = "Keine Events geladen — Button oben klicken.";
     svg.appendChild(text);
     svg.setAttribute("viewBox", "0 0 400 40");
@@ -659,10 +964,7 @@ function drawBatteryChart(events) {
   }
 
   const households = [...new Set(events.map(e => e.household.toLowerCase()))];
-  const laneHeight = 34;
-  const padLeft = 90;
-  const padRight = 20;
-  const padTop = 10;
+  const laneHeight = 34, padLeft = 90, padRight = 20, padTop = 10;
   const width = Math.max(600, events.length * 14 + padLeft + padRight);
   const height = padTop + households.length * laneHeight + 20;
 
@@ -670,62 +972,41 @@ function drawBatteryChart(events) {
   svg.setAttribute("width", width);
   svg.setAttribute("height", height);
 
-  const idByAddress = new Map(currentBatteryHouseholds.map(h => [h.address.toLowerCase(), h.id]));
+  const idByAddress = addressIdMap(currentBatteryHouseholds);
   const colors = { 0: "#9aa0ab", 1: "#4ade80", 2: "#fbbf24" };
 
   const tMin = Math.min(...events.map(e => e.timestamp || 0));
   const tMax = Math.max(...events.map(e => e.timestamp || 0));
   const tSpan = Math.max(1, tMax - tMin);
 
-  const ns = "http://www.w3.org/2000/svg";
-
   households.forEach((addr, laneIdx) => {
     const y = padTop + laneIdx * laneHeight + laneHeight / 2;
 
-    // Lane-Label
-    const label = document.createElementNS(ns, "text");
-    label.setAttribute("x", 4);
-    label.setAttribute("y", y + 4);
-    label.setAttribute("fill", "#9fd3ff");
-    label.setAttribute("font-size", "11");
-    label.setAttribute("font-family", "ui-monospace, Consolas, monospace");
+    const label = svgEl("text", { x: 4, y: y + 4, fill: "#9fd3ff", "font-size": 11, "font-family": "ui-monospace, Consolas, monospace" });
     label.textContent = idByAddress.get(addr) || short(addr);
     svg.appendChild(label);
 
-    // Lane-Linie
-    const line = document.createElementNS(ns, "line");
-    line.setAttribute("x1", padLeft);
-    line.setAttribute("y1", y);
-    line.setAttribute("x2", width - padRight);
-    line.setAttribute("y2", y);
-    line.setAttribute("stroke", "#22262f");
-    line.setAttribute("stroke-width", "1");
-    svg.appendChild(line);
+    svg.appendChild(svgEl("line", { x1: padLeft, y1: y, x2: width - padRight, y2: y, stroke: "#22262f" }));
   });
 
   const laneIndex = new Map(households.map((a, i) => [a, i]));
   const maxAmount = Math.max(1, ...events.map(e => Number(e.amountWh) || 0));
 
   events.forEach(e => {
-    const addr = e.household.toLowerCase();
-    const laneIdx = laneIndex.get(addr);
+    const laneIdx = laneIndex.get(e.household.toLowerCase());
     if (laneIdx === undefined) return;
     const y = padTop + laneIdx * laneHeight + laneHeight / 2;
-    const xFrac = tSpan > 0 ? (e.timestamp - tMin) / tSpan : 0;
-    const x = padLeft + xFrac * (width - padLeft - padRight);
+    const x = padLeft + ((e.timestamp - tMin) / tSpan) * (width - padLeft - padRight);
     const amount = Number(e.amountWh) || 0;
-    const r = 3 + (amount / maxAmount) * 7;
 
-    const circle = document.createElementNS(ns, "circle");
-    circle.setAttribute("cx", x);
-    circle.setAttribute("cy", y);
-    circle.setAttribute("r", r);
-    circle.setAttribute("fill", colors[e.action] || "#9aa0ab");
-    circle.setAttribute("fill-opacity", e.action === 0 ? "0.5" : "0.9");
-    circle.setAttribute("stroke", "#0f1115");
-    circle.setAttribute("stroke-width", "1");
+    const circle = svgEl("circle", {
+      cx: x, cy: y, r: 3 + (amount / maxAmount) * 7,
+      fill: colors[e.action] || "#9aa0ab",
+      "fill-opacity": e.action === 0 ? 0.5 : 0.9,
+      stroke: "#0f1115"
+    });
 
-    const title = document.createElementNS(ns, "title");
+    const title = document.createElementNS(SVG_NS, "title");
     title.textContent =
       `${ACTION_NAMES[e.action] ?? e.action} ${amount}Wh — Slot ${e.slot}` +
       (e.reason ? ` — ${e.reason}` : "") +
@@ -750,6 +1031,7 @@ async function testSettleSlot() {
 }
 
 loadConfig();
+initMeterRangeDefaults();
 refresh();
 </script>
 

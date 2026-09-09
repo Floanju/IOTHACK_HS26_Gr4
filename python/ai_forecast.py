@@ -218,14 +218,10 @@ def main():
                 prod = prod_pred[0]
                 print(f"  {h_id}: Verbrauch={cons:.0f}Wh, Produktion={prod:.0f}Wh")
 
-                # ─────────────────────────────────────────────────────
-                # TODO (Teams): Aktivieren, wenn IncentiveController deployed ist
-                #
-                # submit_forecast_onchain(
-                #     w3, incentive, account,
-                #     h_cfg["address"], next_slot, cons, prod
-                # )
-                # ─────────────────────────────────────────────────────
+                submit_forecast_onchain(
+                    w3, incentive, account,
+                    h_cfg["address"], next_slot, cons, prod
+                )
 
             # Nach einem Slot: tatsächliche Werte als "actual" submitten
             time.sleep(60)
@@ -237,14 +233,10 @@ def main():
                 actual_prod = meter[1]
                 print(f"  {h_id}: actual cons={actual_cons}, prod={actual_prod}")
 
-                # ─────────────────────────────────────────────────────
-                # TODO (Teams): Aktivieren, wenn IncentiveController deployed ist
-                #
-                # submit_actual_onchain(
-                #     w3, incentive, account,
-                #     h_cfg["address"], current_slot, actual_cons, actual_prod
-                # )
-                # ─────────────────────────────────────────────────────
+                submit_actual_onchain(
+                    w3, incentive, account,
+                    h_cfg["address"], current_slot, actual_cons, actual_prod
+                )
 
         except Exception as e:
             print(f"  Fehler: {e}")

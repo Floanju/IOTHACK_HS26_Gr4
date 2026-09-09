@@ -6,6 +6,19 @@ import "./interfaces/IOracleStorage.sol";
 import "./interfaces/IBatteryManager.sol";
 import "./interfaces/IIncentiveController.sol";
 
+/// @dev OracleStorage.sol stellt zusätzlich getMeterAtSlot(household, slot) bereit
+///      (siehe dortige Implementierung - public meterHistory-Mapping mit eigenem
+///      Getter), das aber nicht Teil des vorgegebenen IOracleStorage-Interfaces
+///      ist. Statt IOracleStorage.sol selbst zu verändern (das laut Vorgabe von
+///      Teams unangetastet bleiben soll), ergänzen wir hier lokal ein minimales
+///      Zusatz-Interface für genau diese eine, bereits existierende Funktion.
+interface IOracleStorageHistory {
+    function getMeterAtSlot(address household, uint256 slot)
+        external
+        view
+        returns (IOracleStorage.MeterReading memory);
+}
+
 /**
  * @title P2PEnergyMarket
  * @notice Phase 1: Direkter Energiehandel zwischen Haushalten.
@@ -39,6 +52,13 @@ contract P2PEnergyMarket {
 
     /// @notice Letzter abgerechneter Slot, um Doppelabrechnung zu verhindern
     uint256 public lastSettledSlot;
+
+    /// @notice Schutz gegen Gas-Explosion / DoS: maximal so viele Slots werden
+    ///         pro settleSlot()-Aufruf nachgeholt. Bei größerem Rückstand (z.B.
+    ///         nach längerer Downtime) einfach mehrfach hintereinander aufrufen -
+    ///         lastSettledSlot wandert dann schrittweise weiter, bis alles
+    ///         nachgeholt ist.
+    uint256 public constant MAX_SLOTS_PER_SETTLE = 50;
 
     /// @notice Optionale Phase-2-Integration: BatteryManager-Contract.
     /// @dev Default = address(0) -> keine Batterie-Logik aktiv, settleSlot()
@@ -136,68 +156,28 @@ contract P2PEnergyMarket {
     // ─────────────────────────────────────────────────────────────
 
     /**
-     * @notice Rechnet einen Slot ab: matched Produzenten mit Konsumenten,
-     *         transferiert Stablecoin entsprechend.
+     * @notice Rechnet alle noch offenen Slots seit lastSettledSlot ab (inkl.
+     *         verpasster/übersprungener Aufrufe), matched pro Slot Produzenten
+     *         mit Konsumenten und transferiert Stablecoin entsprechend.
      *
-     *  TODO (Teams):
-     *    1. Hole currentSlot vom Oracle und prüfe, dass er > lastSettledSlot ist
-     *    2. Iteriere über alle households:
-     *       - Lese MeterReading via oracle.getLatestMeterReading()
-     *       - Berechne netto (production - consumption)
-     *       - [Phase 2, optional] Falls batteryManager gesetzt ist (siehe Feld
-     *         oben + setBatteryManager()): passt netto VOR der Klassifizierung
-     *         in Produzent/Konsument an, damit Handel und Batterie-Strategie
-     *         konsistent sind, statt parallel und widersprüchlich zu laufen:
+     * @dev Catch-up-Logik: liest pro Slot über oracle.getMeterAtSlot() die zu
+     *      GENAU DIESEM Slot gehörenden Meter-Werte (statt nur den zuletzt
+     *      gemeldeten via getLatestMeterReading()). Dadurch geht kein Slot
+     *      verloren, wenn settleSlot() nicht bei jedem Slot rechtzeitig
+     *      aufgerufen wird - der nächste Aufruf holt lastSettledSlot+1 bis
+     *      currentSlot vollständig nach (begrenzt durch MAX_SLOTS_PER_SETTLE
+     *      pro Tx, siehe dort).
      *
-     *           if (address(batteryManager) != address(0)
-     *               && batteryManager.isManaged(household)) {
-     *               try batteryManager.decideAction(household)
-     *                   returns (IBatteryManager.Action action, uint256 amountWh) {
-     *                   if (action == IBatteryManager.Action.CHARGE) {
-     *                       netto -= int256(amountWh);   // Haushalt behält Energie für Batterie
-     *                   } else if (action == IBatteryManager.Action.DISCHARGE) {
-     *                       netto += int256(amountWh);   // Batterie liefert zusätzlich Energie
-     *                   }
-     *               } catch {
-     *                   // Batterie-Call fehlgeschlagen -> ignorieren, Handel läuft
-     *                   // ungestört mit dem ursprünglichen netto weiter
-     *               }
-     *           }
-     *
-     *         Wichtig: nicht jeder Haushalt hat zwingend eine verwaltete Batterie
-     *         (z.B. reine Konsumenten) - deshalb zuerst isManaged() prüfen, sonst
-     *         revertet decideAction() und blockiert den ganzen Slot für alle.
-     *         decideAction() wird hier bewusst live innerhalb derselben Transaktion
-     *         aufgerufen (nicht vorher separat getriggert) - so ist garantiert, dass
-     *         die Entscheidung zum selben Slot gehört wie die Meter-Daten, die ihr
-     *         gerade handelt, statt eine veraltete Entscheidung vom Vor-Slot zu lesen.
-     *       - Sammle Überschüsse und Defizite
-     *    3. Matche Produzenten mit Konsumenten
-     *       (einfache Strategie: proportional verteilen)
-     *    4. Pro Match: berechne Betrag = energieWh * effektiverPreisProKwh / 1000
-     *       (Wattstunden -> Kilowattstunden)
-     *       - [Phase 3, optional] Falls incentiveController gesetzt ist (siehe
-     *         Feld oben + setIncentiveController()): passt den Preis für den
-     *         KONSUMENTEN (Käufer) an, bevor ihr den Betrag berechnet:
-     *
-     *           uint256 pricePerKwh = energyPricePerKwh;
-     *           if (address(incentiveController) != address(0)) {
-     *               uint256 multiplier = incentiveController.getPriceMultiplier(consumer);
-     *               pricePerKwh = (energyPricePerKwh * multiplier) / 1000;
-     *           }
-     *
-     *         getPriceMultiplier() ist `view` (kein State-Change) - anders als
-     *         batteryManager.decideAction() oben braucht ihr hier kein try/catch,
-     *         der Call kann nicht versehentlich Storage kaputt machen.
-     *         Multiplikator gilt bewusst für den Konsumenten, nicht den Produzenten
-     *         (siehe IncentiveController.getPriceMultiplier(): 1000=neutral,
-     *         <1000=Rabatt, >1000=Aufschlag - abhängig von dessen eigener
-     *         Prognose-Genauigkeit als "Käufer").
-     *    5. Transferiere via stablecoin.transferFrom(consumer, producer, amount)
-     *       (Konsumenten müssen vorher approve() aufgerufen haben!)
-     *    6. Emit EnergyTraded für jeden Match
-     *    7. Setze lastSettledSlot auf currentSlot
-     *    8. Emit SlotSettled
+     *      Bekannte Einschränkung: batteryManager.decideAction() und
+     *      incentiveController.getPriceMultiplier() liefern immer die JETZIGE
+     *      Live-Entscheidung/den Live-Preis, nicht rückwirkend die historische
+     *      für einen vergangenen Slot (dafür gibt es in den vorgegebenen
+     *      Interfaces keine Historie). Deshalb wird die Batterie-Anpassung nur
+     *      für den aktuellsten (Live-)Slot angewendet; nachgeholte, vergangene
+     *      Slots werden rein auf Basis der historischen Meter-Netto-Werte
+     *      abgerechnet. Der Incentive-Preismultiplikator wird mangels
+     *      Alternative für alle Slots eines Aufrufs mit dem aktuellen Wert
+     *      angewendet.
      */
     /// @dev Bündelt die Zwischenergebnisse der Klassifizierung, damit settleSlot()
     ///      selbst nur wenige lokale Variablen braucht (sonst "Stack too deep").
@@ -211,22 +191,43 @@ contract P2PEnergyMarket {
     }
 
     function settleSlot() external {
-        uint256 currentSlot = oracle.getCurrentSlot();
-        require(currentSlot > lastSettledSlot, "Slot already settled");
+        uint256 liveSlot = oracle.getCurrentSlot();
+        require(liveSlot > lastSettledSlot, "Slot already settled");
+        require(households.length > 0, "No households registered");
 
-        NetPosition memory pos = _classifyHouseholds();
-        _sortProducersDesc(pos.producerAddr, pos.producerWh, pos.producerCount);
+        uint256 fromSlot = lastSettledSlot + 1;
+        uint256 toSlot = liveSlot;
+        if (toSlot - fromSlot + 1 > MAX_SLOTS_PER_SETTLE) {
+            toSlot = fromSlot + MAX_SLOTS_PER_SETTLE - 1;
+        }
 
-        (uint256 totalEnergyTraded, uint256 totalPaid) = _matchAndSettle(pos, currentSlot);
+        for (uint256 slot = fromSlot; slot <= toSlot; slot++) {
+            _settleOneSlot(slot, slot == liveSlot);
+        }
 
-        lastSettledSlot = currentSlot;
-        emit SlotSettled(currentSlot, totalEnergyTraded, totalPaid);
+        lastSettledSlot = toSlot;
     }
 
-    /// @dev Schritt 1: pro Haushalt Netto berechnen und in Produzenten/Konsumenten trennen.
-    function _classifyHouseholds() internal returns (NetPosition memory pos) {
+    /// @dev Rechnet genau einen Slot ab (Klassifizierung -> Sortierung -> Matching).
+    ///      isLiveSlot steuert, ob die Batterie-Anpassung angewendet wird (siehe
+    ///      Einschränkung oben im NatSpec von settleSlot()).
+    function _settleOneSlot(uint256 slot, bool isLiveSlot) internal {
+        NetPosition memory pos = _classifyHouseholdsForSlot(slot, isLiveSlot);
+        _sortProducersDesc(pos.producerAddr, pos.producerWh, pos.producerCount);
+
+        (uint256 slotEnergyTraded, uint256 slotPaid) = _matchAndSettle(pos, slot);
+
+        emit SlotSettled(slot, slotEnergyTraded, slotPaid);
+    }
+
+    /// @dev Schritt 1: pro Haushalt Netto FÜR DIESEN SLOT berechnen (aus der
+    ///      Oracle-Historie, nicht aus dem zuletzt gemeldeten Wert) und in
+    ///      Produzenten/Konsumenten trennen.
+    function _classifyHouseholdsForSlot(uint256 slot, bool applyBattery)
+        internal
+        returns (NetPosition memory pos)
+    {
         uint256 n = households.length;
-        require(n > 0, "No households registered");
 
         pos.producerAddr = new address[](n);
         pos.producerWh = new uint256[](n);
@@ -235,7 +236,7 @@ contract P2PEnergyMarket {
 
         for (uint256 i = 0; i < n; i++) {
             address household = households[i];
-            int256 netto = _nettoForHousehold(household);
+            int256 netto = _nettoForHouseholdAtSlot(household, slot, applyBattery);
 
             if (netto > 0) {
                 pos.producerAddr[pos.producerCount] = household;
@@ -249,12 +250,19 @@ contract P2PEnergyMarket {
         }
     }
 
-    /// @dev Meter-Netto eines Haushalts inkl. optionaler Batterie-Anpassung (Phase 2).
-    function _nettoForHousehold(address household) internal returns (int256 netto) {
-        IOracleStorage.MeterReading memory reading = oracle.getLatestMeterReading(household);
+    /// @dev Meter-Netto eines Haushalts FÜR EINEN BESTIMMTEN SLOT (aus der
+    ///      Oracle-Historie), optional inkl. Batterie-Anpassung (Phase 2) -
+    ///      Batterie nur, wenn applyBattery=true (siehe Einschränkung im
+    ///      NatSpec von settleSlot()).
+    function _nettoForHouseholdAtSlot(address household, uint256 slot, bool applyBattery)
+        internal
+        returns (int256 netto)
+    {
+        IOracleStorage.MeterReading memory reading =
+            IOracleStorageHistory(address(oracle)).getMeterAtSlot(household, slot);
         netto = int256(reading.productionWh) - int256(reading.consumptionWh);
 
-        if (address(batteryManager) != address(0) && batteryManager.isManaged(household)) {
+        if (applyBattery && address(batteryManager) != address(0) && batteryManager.isManaged(household)) {
             try batteryManager.decideAction(household) returns (
                 IBatteryManager.Action action,
                 uint256 amountWh
@@ -293,7 +301,7 @@ contract P2PEnergyMarket {
 
     /// @dev Schritt 3: Waterfall-Matching: Konsument A zahlt Produzent B, bis dessen
     ///      Überschuss "voll" (verbraucht) ist, dann geht's weiter zu C usw.
-    function _matchAndSettle(NetPosition memory pos, uint256 currentSlot)
+    function _matchAndSettle(NetPosition memory pos, uint256 slot)
         internal
         returns (uint256 totalEnergyTraded, uint256 totalPaid)
     {
@@ -317,7 +325,7 @@ contract P2PEnergyMarket {
                     remainingDebtWh,
                     pos.producerWh[pIdx],
                     pricePerKwh,
-                    currentSlot
+                    slot
                 );
 
                 totalEnergyTraded += tradeWh;
@@ -351,7 +359,7 @@ contract P2PEnergyMarket {
         uint256 remainingDebtWh,
         uint256 available,
         uint256 pricePerKwh,
-        uint256 currentSlot
+        uint256 slot
     ) internal returns (uint256 tradeWh, uint256 amount) {
         tradeWh = remainingDebtWh < available ? remainingDebtWh : available;
         amount = (tradeWh * pricePerKwh) / 1000;
@@ -363,7 +371,7 @@ contract P2PEnergyMarket {
             );
         }
 
-        emit EnergyTraded(producer, consumer, tradeWh, amount, currentSlot);
+        emit EnergyTraded(producer, consumer, tradeWh, amount, slot);
     }
 
     // ─────────────────────────────────────────────────────────────

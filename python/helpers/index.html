@@ -157,6 +157,7 @@
     <a href="#sec-verbrauch">Verbrauch &amp; Produktion</a>
     <a href="#sec-wetter">Wetter</a>
     <a href="#sec-batterie">Batterie</a>
+    <a href="#sec-incentive">Incentive</a>
     <a href="#sec-markt">Markt &amp; Oracle</a>
     <a href="#sec-konfig">Konfiguration</a>
   </nav>
@@ -171,9 +172,6 @@
     <button onclick="applySelectedRange()">Anwenden</button>
     <button class="secondary" onclick="setMeterRangePreset(24)">Letzte 24h</button>
     <button class="secondary" onclick="setMeterRangePreset(24 * 7)">Letzte 7 Tage</button>
-  </div>
-  <div class="muted" style="font-size:12px; margin-bottom:10px;">
-    Zeitraum für die Kennzahlen unten sowie die Diagramme in „Verbrauch &amp; Produktion" und „Wetter". Begrenzt durch die vom RPC pro Abfrage erlaubte Blockspanne — bei sehr grossen Zeiträumen können ältere Events fehlen.
   </div>
 
   <div class="stat-row" id="householdStats"></div>
@@ -201,9 +199,6 @@
   <h2>Wetter <span class="muted" style="font-weight:400; font-size:12px;">— Strahlung &amp; Temperatur, aus OracleStorage.WeatherUpdated-Events; Zeitraum siehe Übersicht oben</span></h2>
 
   <div class="stat-row" id="weatherStats"></div>
-  <div class="muted" style="font-size:12px; margin-bottom:14px;">
-    Bewölkung ist nur als aktueller Momentanwert verfügbar — OracleStorage hält dafür keine Historie (WeatherUpdated emittiert sie nicht), daher kein Zeitraum-Diagramm wie unten.
-  </div>
 
   <div id="weatherHistoryStatus" class="muted" style="margin-bottom:8px"></div>
 
@@ -252,6 +247,34 @@
   </table>
 </section>
 
+<section id="sec-incentive" class="panel">
+  <h2>IncentiveController <span class="muted" style="font-weight:400; font-size:12px;">— Phase 3, Reputation &amp; Preisrabatt</span></h2>
+  <div class="kv" id="incentiveKv"></div>
+  <div id="incentiveStatus" class="muted" style="margin-top:8px"></div>
+
+  <table id="incentiveTable" style="margin-top:12px;">
+    <thead>
+      <tr>
+        <th>ID</th><th>Adresse</th><th>Reputationsscore</th><th>Preisfaktor</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <h2 style="margin-top:20px">Verlauf <span class="muted" style="font-weight:400; font-size:12px;">— ScoreUpdated-Events</span></h2>
+  <button onclick="loadIncentiveEvents()">Events laden / aktualisieren</button>
+  <div id="incentiveEventsStatus" class="muted" style="margin-top:8px"></div>
+
+  <table id="incentiveEventsTable" style="margin-top:14px;">
+    <thead>
+      <tr>
+        <th>Zeit</th><th>Haushalt</th><th>Neuer Score</th><th>Abweichung (‰)</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+</section>
+
 <details id="sec-markt" class="panel">
   <summary>Markt &amp; Oracle <span class="muted" style="font-weight:400; font-size:12px;">— technische Vertragsdetails</span></summary>
   <div class="grid2">
@@ -288,12 +311,11 @@
     <label>BatteryManager</label>
     <input type="text" id="cfgBattery" placeholder="leer = automatisch aus P2PEnergyMarket.batteryManager()">
 
+    <label>IncentiveController</label>
+    <input type="text" id="cfgIncentive" placeholder="leer = automatisch aus P2PEnergyMarket.incentiveController()">
+
     <label>Bekannte Haushalte (JSON)</label>
     <textarea id="cfgHouseholds"></textarea>
-  </div>
-  <div class="muted" style="font-size:12px; margin-top:6px;">
-    Oracle hat keine Enumerationsfunktion — Haushalte, die nur im Oracle Daten melden aber nicht im Market registriert sind, lassen sich nur über diese Liste finden. Wird automatisch mit market.getAllHouseholds() und ggf. batteryManager.getManagedHouseholds() vereinigt.
-    BatteryManager wird normalerweise automatisch aus dem Market-Contract gelesen — nur ausfüllen, um das zu überschreiben (z.B. wenn im Market noch nicht verknüpft).
   </div>
   <button onclick="saveConfigAndRefresh()">Speichern &amp; Aktualisieren</button>
   <button class="secondary" onclick="resetConfig()">Auf Defaults zurücksetzen</button>
@@ -303,9 +325,10 @@
 const DEFAULTS = {
   rpc: "https://ethereum-sepolia-rpc.publicnode.com",
   oracle: "0x17F28525b82b703005FF4b3b67fe323e12e6196c",
-  market: "0xe609707c25b480E31EC2Ffcd2b40112b3ae4F65e",
+  market: "0x0334329E61788F13868A81211299027E8b07186e",
   stablecoin: "0x4BaBBaE33998fEd65Ada53bc41CeAa3Cde7F7B46",
-  battery: "", // leer = automatisch aus P2PEnergyMarket.batteryManager() lesen
+  battery: "0x7eB9320520E223F3FCeF6cAf63b34dBb9962D7FA",
+  incentive: "0x1f8708396268368EE01c12F31F3EB574715336ef",
   households: [
     { id: "house_01", address: "0x88CFeA9Cac2DabF1da5Af8c339e652b0e129Bd2E" },
     { id: "house_02", address: "0x1c5fB3b3abe290003bA31C447c4Bb0957CfC12A9" },
@@ -382,6 +405,23 @@ const BATTERY_ABI = [
   }
 ];
 
+// Phase 3: IncentiveController (siehe IncentiveController.sol / IIncentiveController.sol)
+const INCENTIVE_ABI = [
+  {"inputs":[],"name":"owner","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},
+  {"inputs":[{"internalType":"address","name":"household","type":"address"}],"name":"getReputationScore","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[{"internalType":"address","name":"household","type":"address"}],"name":"getPriceMultiplier","outputs":[{"internalType":"uint256","name":"multiplier","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {
+    "anonymous": false,
+    "inputs": [
+      {"indexed": true, "internalType": "address", "name": "household", "type": "address"},
+      {"indexed": false, "internalType": "uint256", "name": "newScore", "type": "uint256"},
+      {"indexed": false, "internalType": "uint256", "name": "deviation", "type": "uint256"}
+    ],
+    "name": "ScoreUpdated",
+    "type": "event"
+  }
+];
+
 const ACTION_NAMES = ["IDLE", "CHARGE", "DISCHARGE"];
 const ACTION_CLASS = ["idle", "charge", "discharge"];
 
@@ -399,8 +439,6 @@ function svgEl(tag, attrs) {
   for (const k in attrs) el.setAttribute(k, attrs[k]);
   return el;
 }
-
-let chartSeq = 0; // eindeutige Clip-Path-IDs, da mehrere Charts gleichzeitig im DOM stehen
 
 // Fallback auf kleinere Blockspanne, da manche RPCs nur begrenzte Ranges pro Abfrage erlauben.
 async function fetchRecentEvents(contract, eventName) {
@@ -435,6 +473,9 @@ let currentOracleContract = null;
 let currentHouseholds = []; // [{id, address}]
 let currentBatteryContract = null;
 let currentBatteryHouseholds = []; // [{id, address}]
+let currentIncentiveContract = null;
+let currentStartTimestamp = 0;
+let currentSlotDuration = 60;
 
 function loadConfig() {
   let saved = null;
@@ -445,6 +486,7 @@ function loadConfig() {
   $("cfgMarket").value = cfg.market;
   $("cfgStablecoin").value = cfg.stablecoin;
   $("cfgBattery").value = cfg.battery || "";
+  $("cfgIncentive").value = cfg.incentive || "";
   $("cfgHouseholds").value = JSON.stringify(cfg.households || DEFAULTS.households, null, 2);
   return cfg;
 }
@@ -462,6 +504,7 @@ function readConfigFromForm() {
     market: $("cfgMarket").value.trim(),
     stablecoin: $("cfgStablecoin").value.trim(),
     battery: $("cfgBattery").value.trim(),
+    incentive: $("cfgIncentive").value.trim(),
     households: JSON.parse($("cfgHouseholds").value)
   };
 }
@@ -520,6 +563,9 @@ async function refresh() {
       market.methods.getAllHouseholds().call()
     ]);
 
+    currentStartTimestamp = Number(startTs);
+    currentSlotDuration = Number(slotDuration);
+
     const oracleKv = $("oracleKv"); oracleKv.innerHTML = "";
     kvRow(oracleKv, "Adresse", cfg.oracle);
     kvRow(oracleKv, "Owner", oOwner);
@@ -547,7 +593,11 @@ async function refresh() {
     const effectiveBattMgr = cfg.battery || battMgr;
     const battMgrLabel = cfg.battery ? "BatteryManager (manuell)" : "BatteryManager";
     kvRow(marketKv, battMgrLabel, effectiveBattMgr === ZERO ? "— nicht gesetzt (Phase 2)" : effectiveBattMgr, effectiveBattMgr === ZERO ? "muted" : "ok");
-    kvRow(marketKv, "IncentiveController", incCtrl === ZERO ? "— nicht gesetzt (Phase 3)" : incCtrl, incCtrl === ZERO ? "muted" : "ok");
+
+    // Gleiches Override-Prinzip wie bei BatteryManager, siehe oben.
+    const effectiveIncCtrl = cfg.incentive || incCtrl;
+    const incCtrlLabel = cfg.incentive ? "IncentiveController (manuell)" : "IncentiveController";
+    kvRow(marketKv, incCtrlLabel, effectiveIncCtrl === ZERO ? "— nicht gesetzt (Phase 3)" : effectiveIncCtrl, effectiveIncCtrl === ZERO ? "muted" : "ok");
     kvRow(marketKv, "Registrierte Haushalte", hhCount);
 
     $("status").innerHTML = `<span class="ok">Aktualisiert: ${new Date().toLocaleTimeString("de-CH")}</span>`;
@@ -558,6 +608,7 @@ async function refresh() {
     await loadMeterHistory();
     await loadWeatherHistory();
     await loadBatteryManager(web3, oracle, effectiveBattMgr, cfg.households, allHouseholds); // Phase 2, optional
+    await loadIncentiveController(web3, effectiveIncCtrl, currentHouseholds); // Phase 3, optional
 
   } catch (e) {
     console.error(e);
@@ -681,15 +732,21 @@ function getMeterRange() {
   return { fromTs, toTs };
 }
 
-// Lädt Events eines Typs, löst ihre Timestamps auf und filtert/sortiert sie
-// auf den gewählten Zeitraum — gemeinsame Pipeline für loadMeterHistory() und
-// loadWeatherHistory(), die sich nur in mapFn (Feld-Mapping) unterscheiden.
+// Lädt Events eines Typs und filtert/sortiert sie auf den gewählten Zeitraum —
+// gemeinsame Pipeline für loadMeterHistory() und loadWeatherHistory(), die sich
+// nur in mapFn (Feld-Mapping) unterscheiden.
+//
+// Zeitstempel wird aus dem Slot berechnet (startTimestamp + slot*SLOT_DURATION),
+// NICHT aus dem Block-Timestamp der TX. oracle_writer.py sendet pro Slot bis zu
+// 8 sequenzielle TX; bei ~12s Blockzeit auf Sepolia kann ein Durchlauf locker die
+// Ziel-Slotdauer von 60s überschreiten (siehe Docstring dort). Der Block-Timestamp
+// ist also die "Uploadzeit" der TX, nicht die vorgesehene Slot-Zeit, und macht die
+// Zeitachse unregelmässig. Die Slot-Zeit ist deterministisch und exakt getaktet.
 async function fetchRangedEvents(eventName, mapFn) {
   const { fromTs, toTs } = getMeterRange();
   const { events, fromBlock } = await fetchRecentEvents(currentOracleContract, eventName);
-  const tsByBlock = await resolveEventTimestamps(events);
   const enriched = events
-    .map(e => mapFn(e, tsByBlock.get(e.blockNumber) || 0))
+    .map(e => mapFn(e, currentStartTimestamp + Number(e.returnValues.slot) * currentSlotDuration))
     .filter(e => e.timestamp >= fromTs && e.timestamp <= toTs)
     .sort((a, b) => a.timestamp - b.timestamp);
   return { enriched, fromTs, toTs, fromBlock };
@@ -811,7 +868,7 @@ async function loadWeatherHistory() {
       return;
     }
 
-    drawWeatherChart(irradianceSvg, enriched, "irradiance", "#fbbf24", " W/m²");
+    drawWeatherChart(irradianceSvg, enriched, "irradiance", "#fbbf24", " W/m²", true);
     drawWeatherChart(temperatureSvg, enriched, "temperatureC", "#60a5fa", " °C");
 
     statusEl.innerHTML = `<span class="ok">${enriched.length} Event(s) geladen (${new Date(fromTs * 1000).toLocaleString("de-CH")} – ${new Date(toTs * 1000).toLocaleString("de-CH")}, ab Block ${fromBlock}).</span>`;
@@ -823,10 +880,17 @@ async function loadWeatherHistory() {
 }
 
 // Catmull-Rom -> kubische Bézier, damit Spitzen zwischen Messwerten abgerundet erscheinen.
-function smoothPathD(points) {
+// yBounds [yMin, yMax] (Pixel-Y, optional) klemmt die Kontrollpunkte auf den gültigen
+// Achsenbereich: Da eine kubische Bézierkurve immer innerhalb der konvexen Hülle ihrer
+// Kontrollpunkte bleibt und die eigentlichen Messpunkte (P0/P1) bereits im Bereich liegen,
+// bleibt damit auch die Kurve dazwischen garantiert im Bereich — sie überschwingt also nie
+// sichtbar unter 0 (oder über das Maximum), sondern schmiegt sich glatt an die Grenze an.
+function smoothPathD(points, yBounds) {
   if (points.length === 0) return "";
   if (points.length === 1) return `M${points[0].x},${points[0].y}`;
   if (points.length === 2) return `M${points[0].x},${points[0].y} L${points[1].x},${points[1].y}`;
+
+  const clampY = y => yBounds ? Math.min(yBounds[1], Math.max(yBounds[0], y)) : y;
 
   let d = `M${points[0].x},${points[0].y} `;
   for (let i = 0; i < points.length - 1; i++) {
@@ -835,9 +899,9 @@ function smoothPathD(points) {
     const p2 = points[i + 1];
     const p3 = points[i + 2] || p2;
     const cp1x = p1.x + (p2.x - p0.x) / 6;
-    const cp1y = p1.y + (p2.y - p0.y) / 6;
+    const cp1y = clampY(p1.y + (p2.y - p0.y) / 6);
     const cp2x = p2.x - (p3.x - p1.x) / 6;
-    const cp2y = p2.y - (p3.y - p1.y) / 6;
+    const cp2y = clampY(p2.y - (p3.y - p1.y) / 6);
     d += `C${cp1x.toFixed(1)},${cp1y.toFixed(1)} ${cp2x.toFixed(1)},${cp2y.toFixed(1)} ${p2.x.toFixed(1)},${p2.y.toFixed(1)} `;
   }
   return d;
@@ -885,10 +949,9 @@ function formatHourTick(t, spanSeconds) {
   return spanSeconds <= 9 * 24 * 3600 ? `${dd} ${hh}` : dd;
 }
 
-// Achsen, Gridlines + Clip-Bereich für ein Zeit-Liniendiagramm; liefert Skalierungs-
-// funktionen und eine geclippte <g> zum Zeichnen der Serien (geteilt von drawMeterChart()
-// und drawWeatherChart()). Das Clipping verhindert, dass Catmull-Rom-Überschwinger der
-// geglätteten Kurven sichtbar über minVal/maxVal hinausragen.
+// Achsen + Gridlines für ein Zeit-Liniendiagramm; liefert Skalierungsfunktionen und
+// yBounds (Pixel-Y-Grenzen für smoothPathD(), siehe dort) zurück. Geteilt von
+// drawMeterChart() und drawWeatherChart().
 function initChart(svg, tMin, tMax, minVal, maxVal) {
   svg.innerHTML = "";
 
@@ -936,22 +999,14 @@ function initChart(svg, tMin, tMax, minVal, maxVal) {
     fill: "none", stroke: "#333944"
   }));
 
-  const clipId = `chart-clip-${chartSeq++}`;
-  const clip = svgEl("clipPath", { id: clipId });
-  clip.appendChild(svgEl("rect", { x: padLeft, y: padTop, width: width - padLeft - padRight, height: height - padTop - padBottom }));
-  svg.appendChild(clip);
-
-  const plot = svgEl("g", { "clip-path": `url(#${clipId})` });
-  svg.appendChild(plot);
-
-  return { xScale, yScale, plot };
+  return { xScale, yScale, yBounds: [padTop, height - padBottom] };
 }
 
-function drawLineSeries(plot, events, segments, xScale, yScale, key, color, tooltip) {
+function drawLineSeries(svg, events, segments, xScale, yScale, yBounds, key, color, tooltip) {
   for (const seg of segments) {
     const pts = seg.map(e => ({ x: xScale(e.timestamp), y: yScale(e[key]) }));
-    plot.appendChild(svgEl("path", {
-      d: smoothPathD(pts), fill: "none", stroke: color,
+    svg.appendChild(svgEl("path", {
+      d: smoothPathD(pts, yBounds), fill: "none", stroke: color,
       "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round"
     }));
   }
@@ -962,33 +1017,36 @@ function drawLineSeries(plot, events, segments, xScale, yScale, key, color, tool
     const title = document.createElementNS(SVG_NS, "title");
     title.textContent = tooltip(e);
     c.appendChild(title);
-    plot.appendChild(c);
+    svg.appendChild(c);
   });
 }
 
 function drawMeterChart(svg, events) {
   const tMin = events[0].timestamp, tMax = events[events.length - 1].timestamp;
-  const maxVal = Math.max(1, ...events.map(e => Math.max(e.consumptionWh, e.productionWh)));
-  const { xScale, yScale, plot } = initChart(svg, tMin, tMax, 0, maxVal);
+  const rawMax = Math.max(1, ...events.map(e => Math.max(e.consumptionWh, e.productionWh)));
+  const maxVal = rawMax * 1.15; // Rand oben, damit Kurven-Überschwinger nicht am oberen Rand anstossen
+  const { xScale, yScale, yBounds } = initChart(svg, tMin, tMax, 0, maxVal);
   const segments = splitContiguous(events);
 
-  drawLineSeries(plot, events, segments, xScale, yScale, "productionWh", "#4ade80",
+  drawLineSeries(svg, events, segments, xScale, yScale, yBounds, "productionWh", "#4ade80",
     e => `Produktion: ${e.productionWh} Wh — Slot ${e.slot} — ${fmtTs(e.timestamp)}`);
-  drawLineSeries(plot, events, segments, xScale, yScale, "consumptionWh", "#f87171",
+  drawLineSeries(svg, events, segments, xScale, yScale, yBounds, "consumptionWh", "#f87171",
     e => `Verbrauch: ${e.consumptionWh} Wh — Slot ${e.slot} — ${fmtTs(e.timestamp)}`);
 }
 
-// Y-Achse orientiert sich am tatsächlichen Wertebereich (+10% Rand) statt fix bei 0
-// zu starten, da z.B. Temperatur auch negativ sein kann.
-function drawWeatherChart(svg, events, key, color, unit) {
+// Y-Achse orientiert sich am tatsächlichen Wertebereich (+15% Rand) statt fix bei 0
+// zu starten, da z.B. Temperatur auch negativ sein kann. floorAtZero erzwingt trotzdem
+// eine untere Grenze von 0 für Grössen, die physikalisch nie negativ sein können (Strahlung).
+function drawWeatherChart(svg, events, key, color, unit, floorAtZero) {
   const tMin = events[0].timestamp, tMax = events[events.length - 1].timestamp;
   const vals = events.map(e => e[key]);
   const rawMin = Math.min(...vals), rawMax = Math.max(...vals);
-  const margin = Math.max(1, (rawMax - rawMin) * 0.1);
-  const { xScale, yScale, plot } = initChart(svg, tMin, tMax, rawMin - margin, rawMax + margin);
+  const margin = Math.max(1, (rawMax - rawMin) * 0.15);
+  const minVal = floorAtZero ? Math.max(0, rawMin - margin) : rawMin - margin;
+  const { xScale, yScale, yBounds } = initChart(svg, tMin, tMax, minVal, rawMax + margin);
   const segments = splitContiguous(events);
 
-  drawLineSeries(plot, events, segments, xScale, yScale, key, color,
+  drawLineSeries(svg, events, segments, xScale, yScale, yBounds, key, color,
     e => `${e[key]}${unit} — Slot ${e.slot} — ${fmtTs(e.timestamp)}`);
 }
 
@@ -1202,6 +1260,109 @@ function drawBatteryChart(events) {
 
     svg.appendChild(circle);
   });
+}
+
+// IncentiveController hat keine Enumerationsfunktion für Haushalte (anders als
+// BatteryManager.getManagedHouseholds()) — daher direkt currentHouseholds nutzen.
+async function loadIncentiveController(web3, incentiveAddress, households) {
+  const kv = $("incentiveKv");
+  const tbody = document.querySelector("#incentiveTable tbody");
+  kv.innerHTML = "";
+  tbody.innerHTML = "";
+  currentIncentiveContract = null;
+
+  if (!incentiveAddress || incentiveAddress === ZERO) {
+    kvRow(kv, "Status", "— nicht gesetzt (P2PEnergyMarket.incentiveController() == address(0))", "muted");
+    $("incentiveStatus").innerHTML = `<span class="muted">IncentiveController ist im Market noch nicht verknüpft (setIncentiveController()) — Phase 3 optional.</span>`;
+    document.querySelector("#incentiveEventsTable tbody").innerHTML = "";
+    $("incentiveEventsStatus").textContent = "";
+    return;
+  }
+
+  const incentive = new web3.eth.Contract(INCENTIVE_ABI, incentiveAddress);
+  currentIncentiveContract = incentive;
+
+  $("incentiveStatus").textContent = "Lade IncentiveController…";
+
+  try {
+    const owner = await incentive.methods.owner().call();
+    kvRow(kv, "Adresse", incentiveAddress);
+    kvRow(kv, "Owner", owner);
+
+    if (households.length === 0) {
+      $("incentiveStatus").innerHTML = `<span class="muted">Keine Haushalte bekannt.</span>`;
+      return;
+    }
+
+    const rows = await Promise.all(households.map(async h => {
+      const [score, multiplier] = await Promise.all([
+        incentive.methods.getReputationScore(h.address).call(),
+        incentive.methods.getPriceMultiplier(h.address).call()
+      ]);
+      return { ...h, score, multiplier };
+    }));
+
+    for (const r of rows) {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${r.id}</td>
+        <td title="${r.address}">${short(r.address)}</td>
+        <td>${r.score}</td>
+        <td>${(Number(r.multiplier) / 10).toFixed(1)}%</td>
+      `;
+      tbody.appendChild(tr);
+    }
+
+    $("incentiveStatus").innerHTML = `<span class="ok">${rows.length} Haushalt(e) geprüft.</span>`;
+  } catch (e) {
+    console.error(e);
+    $("incentiveStatus").innerHTML = `<span class="bad">Fehler beim Laden von IncentiveController: ${e.message}</span>`;
+  }
+}
+
+async function loadIncentiveEvents() {
+  const statusEl = $("incentiveEventsStatus");
+  const tbody = document.querySelector("#incentiveEventsTable tbody");
+
+  if (!currentIncentiveContract) {
+    statusEl.innerHTML = `<span class="muted">Kein IncentiveController verknüpft — zuerst oben aktualisieren.</span>`;
+    return;
+  }
+
+  statusEl.textContent = "Lade ScoreUpdated-Events…";
+  tbody.innerHTML = "";
+
+  try {
+    const { events, fromBlock } = await fetchRecentEvents(currentIncentiveContract, "ScoreUpdated");
+    const tsByBlock = await resolveEventTimestamps(events);
+    const ids = addressIdMap(currentHouseholds);
+
+    const enriched = events.map(e => ({
+      timestamp: tsByBlock.get(e.blockNumber) || 0,
+      household: e.returnValues.household,
+      newScore: e.returnValues.newScore,
+      deviation: e.returnValues.deviation
+    })).sort((a, b) => b.timestamp - a.timestamp);
+
+    for (const ev of enriched) {
+      const id = ids.get(ev.household.toLowerCase()) || short(ev.household);
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${fmtTs(ev.timestamp)}</td>
+        <td title="${ev.household}">${id}</td>
+        <td>${ev.newScore}</td>
+        <td>${ev.deviation}</td>
+      `;
+      tbody.appendChild(tr);
+    }
+
+    statusEl.innerHTML = enriched.length === 0
+      ? `<span class="muted">Keine ScoreUpdated-Events im abgefragten Blockbereich gefunden.</span>`
+      : `<span class="ok">${enriched.length} Event(s) geladen (ab Block ${fromBlock}).</span>`;
+  } catch (e) {
+    console.error(e);
+    statusEl.innerHTML = `<span class="bad">Fehler beim Laden der Events: ${e.message}</span>`;
+  }
 }
 
 async function testSettleSlot() {

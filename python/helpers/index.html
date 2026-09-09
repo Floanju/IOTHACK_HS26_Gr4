@@ -30,31 +30,33 @@
     align-items: center;
   }
   .config-grid label { font-size: 12px; color: #aaa; }
-  input[type=text], textarea {
+  input[type=text], input[type=datetime-local], textarea {
     width: 100%;
     background: #0f1115;
     border: 1px solid #333944;
     color: #e6e6e6;
-    border-radius: 4px;
+    border-radius: 6px;
     padding: 6px 8px;
     font-family: ui-monospace, Consolas, monospace;
     font-size: 12px;
+    color-scheme: dark;
   }
   textarea { min-height: 90px; resize: vertical; }
   button {
-    background: #2b6cb0;
-    color: #fff;
+    background: rgba(43, 108, 176, 0.16);
+    color: #9fd3ff;
     border: none;
-    border-radius: 4px;
-    padding: 8px 16px;
+    border-radius: 999px;
+    padding: 7px 16px;
     font-size: 13px;
     cursor: pointer;
     margin-top: 10px;
     margin-right: 8px;
+    transition: background .15s ease, color .15s ease;
   }
-  button:hover { background: #3a7fca; }
-  button.secondary { background: #333944; }
-  button.secondary:hover { background: #444b58; }
+  button:hover { background: rgba(43, 108, 176, 0.28); }
+  button.secondary { background: transparent; color: #aaa; }
+  button.secondary:hover { background: rgba(255, 255, 255, 0.06); color: #ddd; }
   table { width: 100%; border-collapse: collapse; font-size: 13px; }
   th, td {
     text-align: left;
@@ -69,7 +71,7 @@
   .ok { color: #4ade80; }
   .bad { color: #f87171; }
   .muted { color: #666; }
-  #status { font-size: 12px; margin-top: 8px; min-height: 16px; }
+  #status { font-size: 12px; min-height: 16px; }
   .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
   @media (max-width: 900px) { .grid2 { grid-template-columns: 1fr; } }
 
@@ -97,61 +99,90 @@
 
   /* Einklappbare Haushalts-Charts (natives <details>, keine JS-Toggle-Logik nötig) */
   .chart-card { margin-bottom: 12px; }
-  .chart-card > summary { font-size: 15px; color: #9fd3ff; cursor: pointer; }
-  .chart-card[open] > summary { margin-bottom: 10px; }
+  .panel > summary { font-size: 15px; color: #9fd3ff; cursor: pointer; }
+  .panel[open] > summary { margin-bottom: 10px; }
+
+  /* Kopfzeile: Titel + globaler Status/Refresh, bleibt beim Scrollen oben fixiert */
+  html { scroll-behavior: smooth; }
+  .topbar {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    display: flex; flex-direction: column; gap: 12px;
+    background: #0f1115;
+    margin: -24px -24px 14px;
+    padding: 16px 24px;
+    border-bottom: 1px solid #2a2e38;
+    box-shadow: 0 8px 16px -8px rgba(0, 0, 0, 0.5);
+  }
+  .topbar-main { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
+  .topbar-actions { display: flex; align-items: center; gap: 12px; }
+  .topbar-actions button { margin: 0; }
+
+  /* Von-/Bis-Zeitraum, steuert Übersicht-Kennzahlen + Verbrauchs-/Produktions-Charts */
+  .date-range {
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    background: #0f1115;
+    border: 1px solid #2a2e38;
+    border-radius: 8px;
+    padding: 10px 16px;
+    margin-bottom: 10px;
+  }
+  .date-range label { display: flex; align-items: center; gap: 8px; font-size: 12px; color: #aaa; }
+  .date-range input[type=datetime-local] { width: auto; }
+  .date-range button { margin: 0; }
+
+  /* Sprungmarken-Navigation zu den Abschnitten */
+  .tabs { display: flex; gap: 8px; flex-wrap: wrap; }
+  .tabs a { color: #9fd3ff; text-decoration: none; font-size: 13px; padding: 5px 12px; border: 1px solid #2a2e38; border-radius: 999px; background: #171a21; }
+  .tabs a:hover { border-color: #3a7fca; }
+  section[id], details[id] { scroll-margin-top: 12px; }
+
+  /* Kennzahlen-Kacheln über der Haushalte-Tabelle */
+  .stat-row { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+  .stat-tile { flex: 1 1 130px; background: #0f1115; border: 1px solid #2a2e38; border-radius: 6px; padding: 10px 12px; }
+  .stat-tile .label { font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: .03em; }
+  .stat-tile .value { font-size: 20px; font-weight: 600; margin-top: 2px; }
 </style>
 </head>
 <body>
 
-<h1>Energy Trading — Chain Viewer</h1>
-<div class="sub">Reine Lese-Ansicht auf OracleStorage, P2PEnergyMarket &amp; BatteryManager via RPC — kein MetaMask nötig. Haushalte und Batterie-Ladezyklen werden direkt on-chain gelesen.</div>
-
-<div class="panel">
-  <h2>Konfiguration</h2>
-  <div class="config-grid">
-    <label>RPC URL</label>
-    <input type="text" id="cfgRpc">
-
-    <label>OracleStorage</label>
-    <input type="text" id="cfgOracle">
-
-    <label>P2PEnergyMarket</label>
-    <input type="text" id="cfgMarket">
-
-    <label>Stablecoin</label>
-    <input type="text" id="cfgStablecoin">
-
-    <label>Bekannte Haushalte (JSON)</label>
-    <textarea id="cfgHouseholds"></textarea>
+<div class="topbar">
+  <div class="topbar-main">
+    <div>
+      <h1>Energy Trading — Chain Viewer</h1>
+      <div class="sub">Reine Lese-Ansicht auf OracleStorage, P2PEnergyMarket &amp; BatteryManager via RPC — kein MetaMask nötig.</div>
+    </div>
+    <div class="topbar-actions">
+      <div id="status" class="muted">Lade…</div>
+      <button onclick="refresh()">Aktualisieren</button>
+    </div>
   </div>
-  <div class="muted" style="font-size:12px; margin-top:6px;">
-    Oracle hat keine Enumerationsfunktion — Haushalte, die nur im Oracle Daten melden aber nicht im Market registriert sind, lassen sich nur über diese Liste finden. Wird automatisch mit market.getAllHouseholds() und ggf. batteryManager.getManagedHouseholds() vereinigt.
-  </div>
-  <button onclick="saveConfigAndRefresh()">Speichern &amp; Aktualisieren</button>
-  <button class="secondary" onclick="resetConfig()">Auf Defaults zurücksetzen</button>
-  <div id="status" class="muted">Lade…</div>
+  <nav class="tabs">
+    <a href="#sec-haushalte">Haushalte</a>
+    <a href="#sec-verbrauch">Verbrauch &amp; Produktion</a>
+    <a href="#sec-wetter">Wetter</a>
+    <a href="#sec-batterie">Batterie</a>
+    <a href="#sec-markt">Markt &amp; Oracle</a>
+    <a href="#sec-konfig">Konfiguration</a>
+  </nav>
 </div>
 
-<div class="grid2">
+<section id="sec-haushalte" class="panel">
+  <h2>Übersicht <span class="muted" style="font-weight:400; font-size:12px;">— Haushalte, bekannte Liste ∪ Market.getAllHouseholds()</span></h2>
 
-  <div class="panel">
-    <h2>OracleStorage</h2>
-    <div class="kv" id="oracleKv"></div>
-    <h2 style="margin-top:16px">Wetter (letzter Slot)</h2>
-    <div class="kv" id="weatherKv"></div>
+  <div class="date-range">
+    <label>Von <input type="datetime-local" id="meterFrom"></label>
+    <label>Bis <input type="datetime-local" id="meterTo"></label>
+    <button onclick="applySelectedRange()">Anwenden</button>
+    <button class="secondary" onclick="setMeterRangePreset(24)">Letzte 24h</button>
+    <button class="secondary" onclick="setMeterRangePreset(24 * 7)">Letzte 7 Tage</button>
+  </div>
+  <div class="muted" style="font-size:12px; margin-bottom:10px;">
+    Zeitraum für die Kennzahlen unten sowie die Diagramme in „Verbrauch &amp; Produktion" und „Wetter". Begrenzt durch die vom RPC pro Abfrage erlaubte Blockspanne — bei sehr grossen Zeiträumen können ältere Events fehlen.
   </div>
 
-  <div class="panel">
-    <h2>P2PEnergyMarket</h2>
-    <div class="kv" id="marketKv"></div>
-    <button onclick="testSettleSlot()">settleSlot() simulieren (call, keine TX)</button>
-    <div id="settleResult" class="muted" style="margin-top:8px"></div>
-  </div>
-
-</div>
-
-<div class="panel">
-  <h2>Haushalte <span class="muted" style="font-weight:400; font-size:12px;">— bekannte Liste ∪ Market.getAllHouseholds()</span></h2>
+  <div class="stat-row" id="householdStats"></div>
   <table id="householdsTable">
     <thead>
       <tr>
@@ -164,29 +195,32 @@
     <tbody></tbody>
   </table>
   <div id="householdsStatus" class="muted" style="margin-top:8px"></div>
-</div>
+</section>
 
-<div class="panel">
-  <h2>Verbrauch &amp; Produktion <span class="muted" style="font-weight:400; font-size:12px;">— pro Haushalt, aus OracleStorage.MeterUpdated-Events</span></h2>
+<section id="sec-verbrauch" class="panel">
+  <h2>Verbrauch &amp; Produktion <span class="muted" style="font-weight:400; font-size:12px;">— pro Haushalt, aus OracleStorage.MeterUpdated-Events; Zeitraum siehe Übersicht oben</span></h2>
+  <div id="meterHistoryStatus" class="muted" style="margin-bottom:8px"></div>
+  <div id="meterCharts"></div>
+</section>
 
-  <div class="config-grid" style="grid-template-columns: 80px 1fr 80px 1fr; margin-bottom: 6px;">
-    <label>Von</label>
-    <input type="datetime-local" id="meterFrom">
-    <label>Bis</label>
-    <input type="datetime-local" id="meterTo">
+<section id="sec-wetter" class="panel">
+  <h2>Wetter <span class="muted" style="font-weight:400; font-size:12px;">— Strahlung &amp; Temperatur, aus OracleStorage.WeatherUpdated-Events; Zeitraum siehe Übersicht oben</span></h2>
+
+  <div class="stat-row" id="weatherStats"></div>
+  <div class="muted" style="font-size:12px; margin-bottom:14px;">
+    Bewölkung ist nur als aktueller Momentanwert verfügbar — OracleStorage hält dafür keine Historie (WeatherUpdated emittiert sie nicht), daher kein Zeitraum-Diagramm wie unten.
   </div>
-  <div class="muted" style="font-size:12px; margin-bottom:10px;">
-    Zeitraum für die Diagramme unten. Begrenzt durch die vom RPC pro Abfrage erlaubte Blockspanne — bei sehr grossen Zeiträumen können ältere Events fehlen.
-  </div>
 
-  <button onclick="loadMeterHistory()">Verlauf laden / aktualisieren</button>
-  <button class="secondary" onclick="setMeterRangePreset(24)">Letzte 24h</button>
-  <button class="secondary" onclick="setMeterRangePreset(24 * 7)">Letzte 7 Tage</button>
-  <div id="meterHistoryStatus" class="muted" style="margin-top:8px"></div>
-  <div id="meterCharts" style="margin-top:12px;"></div>
-</div>
+  <div id="weatherHistoryStatus" class="muted" style="margin-bottom:8px"></div>
 
-<div class="panel">
+  <h2 style="font-size:13px; margin-top:4px;">Strahlung (W/m²)</h2>
+  <svg id="weatherIrradianceChart" style="width:100%; height:200px; display:block;"></svg>
+
+  <h2 style="font-size:13px; margin-top:16px;">Temperatur (°C)</h2>
+  <svg id="weatherTemperatureChart" style="width:100%; height:200px; display:block;"></svg>
+</section>
+
+<section id="sec-batterie" class="panel">
   <h2>BatteryManager <span class="muted" style="font-weight:400; font-size:12px;">— Phase 2, Batterie-Ladezyklen</span></h2>
   <div class="kv" id="batteryKv"></div>
   <div id="batteryStatus" class="muted" style="margin-top:8px"></div>
@@ -222,7 +256,50 @@
     </thead>
     <tbody></tbody>
   </table>
-</div>
+</section>
+
+<details id="sec-markt" class="panel">
+  <summary>Markt &amp; Oracle <span class="muted" style="font-weight:400; font-size:12px;">— technische Vertragsdetails</span></summary>
+  <div class="grid2">
+    <div>
+      <h2>OracleStorage</h2>
+      <div class="kv" id="oracleKv"></div>
+      <h2 style="margin-top:16px">Wetter (letzter Slot)</h2>
+      <div class="kv" id="weatherKv"></div>
+    </div>
+    <div>
+      <h2>P2PEnergyMarket</h2>
+      <div class="kv" id="marketKv"></div>
+      <button onclick="testSettleSlot()">settleSlot() simulieren (call, keine TX)</button>
+      <div id="settleResult" class="muted" style="margin-top:8px"></div>
+    </div>
+  </div>
+</details>
+
+<details id="sec-konfig" class="panel">
+  <summary>Konfiguration <span class="muted" style="font-weight:400; font-size:12px;">— RPC, Verträge, bekannte Haushalte</span></summary>
+  <div class="config-grid">
+    <label>RPC URL</label>
+    <input type="text" id="cfgRpc">
+
+    <label>OracleStorage</label>
+    <input type="text" id="cfgOracle">
+
+    <label>P2PEnergyMarket</label>
+    <input type="text" id="cfgMarket">
+
+    <label>Stablecoin</label>
+    <input type="text" id="cfgStablecoin">
+
+    <label>Bekannte Haushalte (JSON)</label>
+    <textarea id="cfgHouseholds"></textarea>
+  </div>
+  <div class="muted" style="font-size:12px; margin-top:6px;">
+    Oracle hat keine Enumerationsfunktion — Haushalte, die nur im Oracle Daten melden aber nicht im Market registriert sind, lassen sich nur über diese Liste finden. Wird automatisch mit market.getAllHouseholds() und ggf. batteryManager.getManagedHouseholds() vereinigt.
+  </div>
+  <button onclick="saveConfigAndRefresh()">Speichern &amp; Aktualisieren</button>
+  <button class="secondary" onclick="resetConfig()">Auf Defaults zurücksetzen</button>
+</details>
 
 <script>
 const DEFAULTS = {
@@ -256,6 +333,16 @@ const ORACLE_ABI = [
       {"indexed": false, "internalType": "uint256", "name": "production", "type": "uint256"}
     ],
     "name": "MeterUpdated",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {"indexed": false, "internalType": "uint256", "name": "slot", "type": "uint256"},
+      {"indexed": false, "internalType": "uint256", "name": "irradiance", "type": "uint256"},
+      {"indexed": false, "internalType": "int256", "name": "temperature", "type": "int256"}
+    ],
+    "name": "WeatherUpdated",
     "type": "event"
   }
 ];
@@ -315,6 +402,9 @@ function svgEl(tag, attrs) {
   for (const k in attrs) el.setAttribute(k, attrs[k]);
   return el;
 }
+
+// Fortlaufende ID für Clip-Pfade, da mehrere Charts gleichzeitig im DOM stehen
+let chartSeq = 0;
 
 // Events per getPastEvents laden — mit Fallback auf kleinere Blockspanne,
 // da manche RPCs nur begrenzte Ranges pro Abfrage erlauben.
@@ -446,6 +536,7 @@ async function refresh() {
     kvRow(weatherKv, "Temperatur", (Number(weather.temperatureC) / 10).toFixed(1) + " °C");
     kvRow(weatherKv, "Bewölkung", weather.cloudCover + " %");
     kvRow(weatherKv, "Zeit", fmtTs(weather.timestamp));
+    renderWeatherStats(weather);
 
     const marketKv = $("marketKv"); marketKv.innerHTML = "";
     kvRow(marketKv, "Adresse", cfg.market);
@@ -466,8 +557,11 @@ async function refresh() {
     // über die manuell gepflegte Liste — daher: Union aus beiden Quellen.
     await loadHouseholds(oracle, market, cfg.households, allHouseholds);
 
-    // Verbrauch/Produktion der letzten 24h pro Haushalt (MeterUpdated-Events)
+    // Verbrauch/Produktion im gewählten Zeitraum pro Haushalt (MeterUpdated-Events)
     await loadMeterHistory();
+
+    // Wetterverlauf im gewählten Zeitraum (WeatherUpdated-Events)
+    await loadWeatherHistory();
 
     // Phase 2: BatteryManager — Ladezyklen anzeigen (nur wenn gesetzt)
     await loadBatteryManager(web3, oracle, battMgr, cfg.households, allHouseholds);
@@ -490,6 +584,28 @@ function mergeHouseholds(known, onChain) {
   return Array.from(byAddress.values());
 }
 
+// Kennzahlen-Kacheln über der Haushalte-Tabelle — abhängig vom gewählten Zeitraum
+// (siehe getMeterRange()), befüllt aus den MeterUpdated-Events in loadMeterHistory().
+//
+// Zeigt den Durchschnitt pro Messung (Ø je Slot), nicht die Summe: 1 Slot
+// entspricht 15 simulierten Minuten, real aber nur ~1 Minute (siehe
+// data_simulator.py, SIM_MINUTES_PER_SLOT). Eine Summe über z.B. "letzte 24h"
+// realer Zeit würde also ~1440 Slots aufaddieren = ~15 simulierte Tage
+// Energie, was als Wert für "24h" unrealistisch hoch wirkt. Der Durchschnitt
+// bleibt dagegen unabhängig von der Anzahl Messungen im gewählten Zeitraum.
+function renderHouseholdStats(activeHouseholds, avgConsumption, avgProduction) {
+  const statsEl = $("householdStats");
+  if (activeHouseholds === 0) { statsEl.innerHTML = ""; return; }
+
+  const net = avgProduction - avgConsumption;
+  const tile = (label, value, cls) => `<div class="stat-tile"><div class="label">${label}</div><div class="value ${cls || ""}">${value}</div></div>`;
+  statsEl.innerHTML =
+    tile("Haushalte (aktiv)", activeHouseholds) +
+    tile("Ø Verbrauch / Messung", `${avgConsumption} Wh`) +
+    tile("Ø Produktion / Messung", `${avgProduction} Wh`) +
+    tile("Ø Netto / Messung", `${net >= 0 ? "+" : ""}${net} Wh`, net >= 0 ? "ok" : "bad");
+}
+
 async function loadHouseholds(oracle, market, knownHouseholds, onChainAddresses) {
   const tbody = document.querySelector("#householdsTable tbody");
   tbody.innerHTML = "";
@@ -498,6 +614,7 @@ async function loadHouseholds(oracle, market, knownHouseholds, onChainAddresses)
   currentHouseholds = households;
 
   if (households.length === 0) {
+    $("householdStats").innerHTML = "";
     $("householdsStatus").innerHTML = `<span class="muted">Keine Haushalte bekannt — weder in der Liste noch im Market registriert.</span>`;
     return;
   }
@@ -559,7 +676,14 @@ function setMeterRangePreset(hours) {
   const from = new Date(now.getTime() - hours * 3600 * 1000);
   $("meterTo").value = toDatetimeLocal(now);
   $("meterFrom").value = toDatetimeLocal(from);
+  applySelectedRange();
+}
+
+// Lädt alles, was vom gemeinsamen Von-/Bis-Zeitraum abhängt (Übersicht-Kennzahlen,
+// Verbrauchs-/Produktions-Charts, Wetterverlauf).
+function applySelectedRange() {
   loadMeterHistory();
+  loadWeatherHistory();
 }
 
 function getMeterRange() {
@@ -600,6 +724,7 @@ async function loadMeterHistory() {
     container.innerHTML = "";
 
     if (enriched.length === 0) {
+      renderHouseholdStats(0, 0, 0);
       statusEl.innerHTML = `<span class="muted">Keine MeterUpdated-Events im gewählten Zeitraum gefunden (abgefragt ab Block ${fromBlock}). Zeitraum evtl. ausserhalb der vom RPC abfragbaren Blockspanne — kleineren/jüngeren Zeitraum versuchen.</span>`;
       return;
     }
@@ -617,6 +742,10 @@ async function loadMeterHistory() {
       container.appendChild(card);
       drawMeterChart(svg, evs);
     }
+
+    const avgConsumption = Math.round(enriched.reduce((s, e) => s + e.consumptionWh, 0) / enriched.length);
+    const avgProduction = Math.round(enriched.reduce((s, e) => s + e.productionWh, 0) / enriched.length);
+    renderHouseholdStats(byHousehold.size, avgConsumption, avgProduction);
 
     statusEl.innerHTML = `<span class="ok">${enriched.length} Event(s) über ${byHousehold.size} Haushalt(e) geladen (${new Date(fromTs * 1000).toLocaleString("de-CH")} – ${new Date(toTs * 1000).toLocaleString("de-CH")}, ab Block ${fromBlock}).</span>`;
 
@@ -649,6 +778,67 @@ function buildMeterCard(id) {
   card.appendChild(legend);
 
   return { card, svg };
+}
+
+// ─────────────────────────────────────────────────────────────
+//  Wetter — Strahlung & Temperatur im gewählten Zeitraum (WeatherUpdated-Events)
+// ─────────────────────────────────────────────────────────────
+
+// Bewölkung wird von OracleStorage nur als Momentanwert gehalten — das
+// WeatherUpdated-Event emittiert sie nicht (nur slot/irradiance/temperature),
+// daher gibt es dafür keine Historie und kein Zeitraum-Diagramm wie bei den
+// beiden Charts unten. Stattdessen zeigen wir sie hier als aktuelle Kennzahl,
+// zusammen mit den aktuellen Werten der beiden Chart-Grössen als Kontext.
+function renderWeatherStats(weather) {
+  const el = $("weatherStats");
+  const tile = (label, value) => `<div class="stat-tile"><div class="label">${label}</div><div class="value">${value}</div></div>`;
+  el.innerHTML =
+    tile("Bewölkung (aktuell)", `${weather.cloudCover}%`) +
+    tile("Strahlung (aktuell)", `${weather.irradianceWm2} W/m²`) +
+    tile("Temperatur (aktuell)", `${(Number(weather.temperatureC) / 10).toFixed(1)} °C`);
+}
+
+async function loadWeatherHistory() {
+  const statusEl = $("weatherHistoryStatus");
+  const irradianceSvg = $("weatherIrradianceChart");
+  const temperatureSvg = $("weatherTemperatureChart");
+
+  if (!currentOracleContract || !currentWeb3) {
+    statusEl.innerHTML = `<span class="muted">Zuerst oben aktualisieren, um mit der Chain zu verbinden.</span>`;
+    return;
+  }
+
+  const { fromTs, toTs } = getMeterRange();
+  statusEl.textContent = "Lade WeatherUpdated-Events…";
+
+  try {
+    const { events, fromBlock } = await fetchRecentEvents(currentOracleContract, "WeatherUpdated");
+    const tsByBlock = await resolveEventTimestamps(events);
+
+    const enriched = events.map(e => ({
+      timestamp: tsByBlock.get(e.blockNumber) || 0,
+      slot: e.returnValues.slot,
+      irradiance: Number(e.returnValues.irradiance),
+      temperatureC: Number(e.returnValues.temperature) / 10
+    })).filter(e => e.timestamp >= fromTs && e.timestamp <= toTs)
+      .sort((a, b) => a.timestamp - b.timestamp);
+
+    if (enriched.length === 0) {
+      clearChart(irradianceSvg, "Keine Daten im gewählten Zeitraum.");
+      clearChart(temperatureSvg, "Keine Daten im gewählten Zeitraum.");
+      statusEl.innerHTML = `<span class="muted">Keine WeatherUpdated-Events im gewählten Zeitraum gefunden (abgefragt ab Block ${fromBlock}).</span>`;
+      return;
+    }
+
+    drawWeatherChart(irradianceSvg, enriched, "irradiance", "#fbbf24", " W/m²");
+    drawWeatherChart(temperatureSvg, enriched, "temperatureC", "#60a5fa", " °C");
+
+    statusEl.innerHTML = `<span class="ok">${enriched.length} Event(s) geladen (${new Date(fromTs * 1000).toLocaleString("de-CH")} – ${new Date(toTs * 1000).toLocaleString("de-CH")}, ab Block ${fromBlock}).</span>`;
+
+  } catch (e) {
+    console.error(e);
+    statusEl.innerHTML = `<span class="bad">Fehler beim Laden der Wetter-Events: ${e.message}</span>`;
+  }
 }
 
 /**
@@ -721,11 +911,13 @@ function formatHourTick(t, spanSeconds) {
 }
 
 /**
- * Zeichnet Verbrauch (rot) und Produktion (grün) als geglättetes
- * Liniendiagramm über die Zeit für einen einzelnen Haushalt — ohne
- * Datenpunkt-Marker; Datenlücken bleiben als Lücke im Graph sichtbar.
+ * Baut Achsen, Gridlines und einen Clip-Bereich für ein Zeit-Liniendiagramm
+ * und liefert die Skalierungsfunktionen + eine geclippte <g> zum Zeichnen der
+ * Serien zurück. Wird von drawMeterChart() und drawWeatherChart() geteilt.
+ * Das Clipping verhindert, dass Catmull-Rom-Überschwinger der geglätteten
+ * Kurven zwischen Messpunkten sichtbar über minVal/maxVal hinausragen.
  */
-function drawMeterChart(svg, events) {
+function initChart(svg, tMin, tMax, minVal, maxVal) {
   svg.innerHTML = "";
 
   // viewBox 1:1 zur tatsächlich gerenderten Breite setzen — sonst skaliert
@@ -737,20 +929,18 @@ function drawMeterChart(svg, events) {
   svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
   svg.style.height = height + "px";
 
-  const tMin = events[0].timestamp;
-  const tMax = events[events.length - 1].timestamp;
   const tSpan = Math.max(1, tMax - tMin);
-  const maxVal = Math.max(1, ...events.map(e => Math.max(e.consumptionWh, e.productionWh)));
-
+  const vSpan = Math.max(1, maxVal - minVal);
   const xScale = t => padLeft + ((t - tMin) / tSpan) * (width - padLeft - padRight);
-  const yScale = v => height - padBottom - (v / maxVal) * (height - padTop - padBottom);
+  const yScale = v => height - padBottom - ((v - minVal) / vSpan) * (height - padTop - padBottom);
 
-  // Horizontale Gridlines + Y-Achsen-Beschriftung (0 / 50% / 100%)
+  // Horizontale Gridlines + Y-Achsen-Beschriftung (min / Mitte / max)
   [0, 0.5, 1].forEach(f => {
-    const y = yScale(maxVal * f);
+    const val = minVal + vSpan * f;
+    const y = yScale(val);
     svg.appendChild(svgEl("line", { x1: padLeft, x2: width - padRight, y1: y, y2: y, stroke: "#22262f" }));
     const label = svgEl("text", { x: padLeft - 8, y: y + 3, fill: "#666", "font-size": 10, "text-anchor": "end" });
-    label.textContent = Math.round(maxVal * f);
+    label.textContent = Math.round(val);
     svg.appendChild(label);
   });
 
@@ -774,30 +964,80 @@ function drawMeterChart(svg, events) {
     fill: "none", stroke: "#333944"
   }));
 
-  const segments = splitContiguous(events);
+  const clipId = `chart-clip-${chartSeq++}`;
+  const clip = svgEl("clipPath", { id: clipId });
+  clip.appendChild(svgEl("rect", { x: padLeft, y: padTop, width: width - padLeft - padRight, height: height - padTop - padBottom }));
+  svg.appendChild(clip);
 
-  function addSeries(key, color) {
-    for (const seg of segments) {
-      const pts = seg.map(e => ({ x: xScale(e.timestamp), y: yScale(e[key]) }));
-      svg.appendChild(svgEl("path", {
-        d: smoothPathD(pts), fill: "none", stroke: color,
-        "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round"
-      }));
-    }
+  const plot = svgEl("g", { "clip-path": `url(#${clipId})` });
+  svg.appendChild(plot);
 
-    // Unsichtbare, grössere Hover-Ziele statt sichtbarer Punkte (nur Tooltip)
-    events.forEach(e => {
-      const c = svgEl("circle", { cx: xScale(e.timestamp), cy: yScale(e[key]), r: 6, fill: "transparent" });
-      const title = document.createElementNS(SVG_NS, "title");
-      const label = key === "productionWh" ? "Produktion" : "Verbrauch";
-      title.textContent = `${label}: ${e[key]} Wh — Slot ${e.slot} — ${fmtTs(e.timestamp)}`;
-      c.appendChild(title);
-      svg.appendChild(c);
-    });
+  return { xScale, yScale, plot };
+}
+
+/** Zeichnet eine einzelne geglättete Linienserie (samt Hover-Tooltips) in eine initChart()-Plotfläche. */
+function drawLineSeries(plot, events, segments, xScale, yScale, key, color, tooltip) {
+  for (const seg of segments) {
+    const pts = seg.map(e => ({ x: xScale(e.timestamp), y: yScale(e[key]) }));
+    plot.appendChild(svgEl("path", {
+      d: smoothPathD(pts), fill: "none", stroke: color,
+      "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round"
+    }));
   }
 
-  addSeries("productionWh", "#4ade80");
-  addSeries("consumptionWh", "#f87171");
+  // Unsichtbare, grössere Hover-Ziele statt sichtbarer Punkte (nur Tooltip)
+  events.forEach(e => {
+    const c = svgEl("circle", { cx: xScale(e.timestamp), cy: yScale(e[key]), r: 6, fill: "transparent" });
+    const title = document.createElementNS(SVG_NS, "title");
+    title.textContent = tooltip(e);
+    c.appendChild(title);
+    plot.appendChild(c);
+  });
+}
+
+/**
+ * Zeichnet Verbrauch (rot) und Produktion (grün) als geglättetes
+ * Liniendiagramm über die Zeit für einen einzelnen Haushalt — ohne
+ * Datenpunkt-Marker; Datenlücken bleiben als Lücke im Graph sichtbar.
+ */
+function drawMeterChart(svg, events) {
+  const tMin = events[0].timestamp, tMax = events[events.length - 1].timestamp;
+  const maxVal = Math.max(1, ...events.map(e => Math.max(e.consumptionWh, e.productionWh)));
+  const { xScale, yScale, plot } = initChart(svg, tMin, tMax, 0, maxVal);
+  const segments = splitContiguous(events);
+
+  drawLineSeries(plot, events, segments, xScale, yScale, "productionWh", "#4ade80",
+    e => `Produktion: ${e.productionWh} Wh — Slot ${e.slot} — ${fmtTs(e.timestamp)}`);
+  drawLineSeries(plot, events, segments, xScale, yScale, "consumptionWh", "#f87171",
+    e => `Verbrauch: ${e.consumptionWh} Wh — Slot ${e.slot} — ${fmtTs(e.timestamp)}`);
+}
+
+/**
+ * Zeichnet eine einzelne Wetter-Kennzahl (Strahlung oder Temperatur) als
+ * geglättetes Liniendiagramm über die Zeit. Y-Achse orientiert sich am
+ * tatsächlichen Wertebereich (+10% Rand) statt fix bei 0 zu starten, da
+ * z.B. Temperatur auch negativ sein kann.
+ */
+function drawWeatherChart(svg, events, key, color, unit) {
+  const tMin = events[0].timestamp, tMax = events[events.length - 1].timestamp;
+  const vals = events.map(e => e[key]);
+  const rawMin = Math.min(...vals), rawMax = Math.max(...vals);
+  const margin = Math.max(1, (rawMax - rawMin) * 0.1);
+  const { xScale, yScale, plot } = initChart(svg, tMin, tMax, rawMin - margin, rawMax + margin);
+  const segments = splitContiguous(events);
+
+  drawLineSeries(plot, events, segments, xScale, yScale, key, color,
+    e => `${e[key]}${unit} — Slot ${e.slot} — ${fmtTs(e.timestamp)}`);
+}
+
+/** Leert eine Chart-SVG und zeigt stattdessen einen Hinweistext (z.B. "keine Daten"). */
+function clearChart(svg, message) {
+  svg.innerHTML = "";
+  svg.setAttribute("viewBox", "0 0 400 40");
+  svg.style.height = "40px";
+  const text = svgEl("text", { x: 10, y: 24, fill: "#666", "font-size": 12 });
+  text.textContent = message;
+  svg.appendChild(text);
 }
 
 // ─────────────────────────────────────────────────────────────

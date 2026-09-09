@@ -72,12 +72,34 @@
   #status { font-size: 12px; margin-top: 8px; min-height: 16px; }
   .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
   @media (max-width: 900px) { .grid2 { grid-template-columns: 1fr; } }
+
+  /* Batterie-Aktionen (Phase 2) */
+  .act-charge { color: #4ade80; font-weight: 600; }
+  .act-discharge { color: #fbbf24; font-weight: 600; }
+  .act-idle { color: #9aa0ab; }
+  .badge {
+    display: inline-block;
+    padding: 1px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+  }
+  .badge.charge { background: rgba(74, 222, 128, 0.15); color: #4ade80; }
+  .badge.discharge { background: rgba(251, 191, 36, 0.15); color: #fbbf24; }
+  .badge.idle { background: rgba(154, 160, 171, 0.15); color: #9aa0ab; }
+
+  /* Einfacher SoC-/Zyklus-Chart (SVG, keine Lib nötig) */
+  #batteryChartWrap { overflow-x: auto; margin-top: 10px; }
+  #batteryChart { display: block; }
+  .chart-legend { display: flex; gap: 16px; font-size: 12px; color: #aaa; margin-top: 6px; flex-wrap: wrap; }
+  .chart-legend span.dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 4px; vertical-align: middle; }
 </style>
 </head>
 <body>
 
 <h1>Energy Trading — Chain Viewer</h1>
-<div class="sub">Reine Lese-Ansicht auf OracleStorage &amp; P2PEnergyMarket via RPC — kein MetaMask nötig. Haushalte werden direkt on-chain gelesen.</div>
+<div class="sub">Reine Lese-Ansicht auf OracleStorage, P2PEnergyMarket &amp; BatteryManager via RPC — kein MetaMask nötig. Haushalte und Batterie-Ladezyklen werden direkt on-chain gelesen.</div>
 
 <div class="panel">
   <h2>Konfiguration</h2>
@@ -98,7 +120,7 @@
     <textarea id="cfgHouseholds"></textarea>
   </div>
   <div class="muted" style="font-size:12px; margin-top:6px;">
-    Oracle hat keine Enumerationsfunktion — Haushalte, die nur im Oracle Daten melden aber nicht im Market registriert sind, lassen sich nur über diese Liste finden. Wird automatisch mit market.getAllHouseholds() vereinigt.
+    Oracle hat keine Enumerationsfunktion — Haushalte, die nur im Oracle Daten melden aber nicht im Market registriert sind, lassen sich nur über diese Liste finden. Wird automatisch mit market.getAllHouseholds() und ggf. batteryManager.getManagedHouseholds() vereinigt.
   </div>
   <button onclick="saveConfigAndRefresh()">Speichern &amp; Aktualisieren</button>
   <button class="secondary" onclick="resetConfig()">Auf Defaults zurücksetzen</button>
@@ -137,6 +159,44 @@
     <tbody></tbody>
   </table>
   <div id="householdsStatus" class="muted" style="margin-top:8px"></div>
+</div>
+
+<div class="panel">
+  <h2>BatteryManager <span class="muted" style="font-weight:400; font-size:12px;">— Phase 2, Batterie-Ladezyklen</span></h2>
+  <div class="kv" id="batteryKv"></div>
+  <div id="batteryStatus" class="muted" style="margin-top:8px"></div>
+
+  <table id="batteryTable" style="margin-top:12px;">
+    <thead>
+      <tr>
+        <th>ID</th><th>Adresse</th><th>Verwaltet?</th>
+        <th>Letzte Aktion</th><th>Menge (Wh)</th><th>Slot</th><th>Zeitpunkt</th><th>SoC % (aktuell)</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <h2 style="margin-top:20px">Verlauf <span class="muted" style="font-weight:400; font-size:12px;">— DecisionMade-Events (Lade-/Entladezyklen über Zeit)</span></h2>
+  <button onclick="loadBatteryEvents()">Events laden / aktualisieren</button>
+  <div id="batteryEventsStatus" class="muted" style="margin-top:8px"></div>
+
+  <div id="batteryChartWrap">
+    <svg id="batteryChart" width="100%" height="160"></svg>
+  </div>
+  <div class="chart-legend">
+    <span><span class="dot" style="background:#4ade80"></span>Charge</span>
+    <span><span class="dot" style="background:#fbbf24"></span>Discharge</span>
+    <span><span class="dot" style="background:#9aa0ab"></span>Idle</span>
+  </div>
+
+  <table id="batteryEventsTable" style="margin-top:14px;">
+    <thead>
+      <tr>
+        <th>Zeit</th><th>Haushalt</th><th>Aktion</th><th>Menge (Wh)</th><th>Slot</th><th>Begründung</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
 </div>
 
 <script>
@@ -178,11 +238,49 @@ const MARKET_ABI = [
   {"inputs":[],"name":"settleSlot","outputs":[],"stateMutability":"nonpayable","type":"function"}
 ];
 
+// Phase 2: BatteryManager (siehe BatteryManager.sol / IBatteryManager.sol)
+// Decision-Struct-Reihenfolge muss exakt zu BatteryManager.sol passen: (action, amountWh, slot, timestamp)
+const BATTERY_ABI = [
+  {"inputs":[],"name":"owner","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"oracle","outputs":[{"internalType":"contract IOracleStorage","name":"","type":"address"}],"stateMutability":"view","type":"function"},
+  {"inputs":[{"internalType":"address","name":"","type":"address"}],"name":"isManaged","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"getManagedHouseholds","outputs":[{"internalType":"address[]","name":"","type":"address[]"}],"stateMutability":"view","type":"function"},
+  {"inputs":[{"internalType":"address","name":"household","type":"address"}],"name":"getLastDecision","outputs":[{"components":[{"internalType":"enum IBatteryManager.Action","name":"action","type":"uint8"},{"internalType":"uint256","name":"amountWh","type":"uint256"},{"internalType":"uint256","name":"slot","type":"uint256"},{"internalType":"uint256","name":"timestamp","type":"uint256"}],"internalType":"struct BatteryManager.Decision","name":"","type":"tuple"}],"stateMutability":"view","type":"function"},
+  {
+    "anonymous": false,
+    "inputs": [
+      {"indexed": true, "internalType": "address", "name": "household", "type": "address"},
+      {"indexed": false, "internalType": "enum IBatteryManager.Action", "name": "action", "type": "uint8"},
+      {"indexed": false, "internalType": "uint256", "name": "amountWh", "type": "uint256"},
+      {"indexed": false, "internalType": "uint256", "name": "slot", "type": "uint256"},
+      {"indexed": false, "internalType": "string", "name": "reason", "type": "string"}
+    ],
+    "name": "DecisionMade",
+    "type": "event"
+  }
+];
+
+const ACTION_NAMES = ["IDLE", "CHARGE", "DISCHARGE"];
+const ACTION_CLASS = ["idle", "charge", "discharge"];
+
 const ZERO = "0x0000000000000000000000000000000000000000";
 const $ = id => document.getElementById(id);
 const short = a => a ? a.slice(0,6) + "…" + a.slice(-4) : "-";
 const fmtTs = ts => Number(ts) === 0 ? "-" : new Date(Number(ts) * 1000).toLocaleString("de-CH");
 const wei6 = v => (Number(v) / 1e6).toFixed(6);
+
+function actionBadge(actionNum) {
+  const idx = Number(actionNum);
+  const name = ACTION_NAMES[idx] ?? ("#" + idx);
+  const cls = ACTION_CLASS[idx] ?? "idle";
+  return `<span class="badge ${cls}">${name}</span>`;
+}
+
+// Wird zwischen refresh() und loadBatteryEvents() geteilt, damit der Button
+// nicht die ganze Konfiguration neu parsen/verbinden muss.
+let currentWeb3 = null;
+let currentBatteryContract = null;
+let currentBatteryHouseholds = []; // [{id, address}]
 
 function loadConfig() {
   let saved = null;
@@ -231,6 +329,7 @@ function kvRow(container, key, value, cls) {
 async function refresh() {
   $("status").textContent = "Lade…";
   $("householdsStatus").textContent = "";
+  $("batteryStatus").textContent = "";
   let cfg;
   try { cfg = readConfigFromForm(); } catch (e) {
     $("status").innerHTML = `<span class="bad">Ungültiges JSON in "Bekannte Haushalte": ${e.message}</span>`;
@@ -238,6 +337,7 @@ async function refresh() {
   }
 
   const web3 = new Web3(new Web3.providers.HttpProvider(cfg.rpc));
+  currentWeb3 = web3;
   const oracle = new web3.eth.Contract(ORACLE_ABI, cfg.oracle);
   const market = new web3.eth.Contract(MARKET_ABI, cfg.market);
 
@@ -294,6 +394,9 @@ async function refresh() {
     // im Oracle Daten melden (noch nicht im Market registriert), kennen wir nur
     // über die manuell gepflegte Liste — daher: Union aus beiden Quellen.
     await loadHouseholds(oracle, market, cfg.households, allHouseholds);
+
+    // Phase 2: BatteryManager — Ladezyklen anzeigen (nur wenn gesetzt)
+    await loadBatteryManager(web3, oracle, battMgr, cfg.households, allHouseholds);
 
   } catch (e) {
     console.error(e);
@@ -358,6 +461,279 @@ async function loadHouseholds(oracle, market, knownHouseholds, onChainAddresses)
     console.error(e);
     $("householdsStatus").innerHTML = `<span class="bad">Fehler beim Laden der Haushaltsdaten: ${e.message}</span>`;
   }
+}
+
+// ─────────────────────────────────────────────────────────────
+//  Phase 2: BatteryManager — aktuelle Entscheidung pro Haushalt
+// ─────────────────────────────────────────────────────────────
+
+async function loadBatteryManager(web3, oracle, battMgrAddress, knownHouseholds, onChainMarketHouseholds) {
+  const batteryKv = $("batteryKv");
+  const tbody = document.querySelector("#batteryTable tbody");
+  batteryKv.innerHTML = "";
+  tbody.innerHTML = "";
+  currentBatteryContract = null;
+  currentBatteryHouseholds = [];
+
+  if (!battMgrAddress || battMgrAddress === ZERO) {
+    kvRow(batteryKv, "Status", "— nicht gesetzt (P2PEnergyMarket.batteryManager() == address(0))", "muted");
+    $("batteryStatus").innerHTML = `<span class="muted">BatteryManager ist im Market noch nicht verknüpft (setBatteryManager()) — Phase 2 optional.</span>`;
+    drawBatteryChart([]); // leeren
+    document.querySelector("#batteryEventsTable tbody").innerHTML = "";
+    $("batteryEventsStatus").textContent = "";
+    return;
+  }
+
+  const battery = new web3.eth.Contract(BATTERY_ABI, battMgrAddress);
+  currentBatteryContract = battery;
+
+  $("batteryStatus").textContent = "Lade BatteryManager…";
+
+  try {
+    const [bOwner, bOracle, managedOnChain] = await Promise.all([
+      battery.methods.owner().call(),
+      battery.methods.oracle().call(),
+      battery.methods.getManagedHouseholds().call()
+    ]);
+
+    kvRow(batteryKv, "Adresse", battMgrAddress);
+    kvRow(batteryKv, "Owner", bOwner);
+    kvRow(batteryKv, "Oracle", bOracle, bOracle.toLowerCase() === $("cfgOracle").value.trim().toLowerCase() ? "ok" : "bad");
+    kvRow(batteryKv, "Verwaltete Haushalte (on-chain)", managedOnChain.length);
+
+    // Union aus bekannter Liste, Market-Haushalten und on-chain verwalteten Haushalten,
+    // damit auch Haushalte auftauchen, die (noch) nicht im Market registriert sind.
+    const union = mergeHouseholds(
+      mergeHouseholds(knownHouseholds, onChainMarketHouseholds),
+      managedOnChain
+    );
+    currentBatteryHouseholds = union;
+
+    if (union.length === 0) {
+      $("batteryStatus").innerHTML = `<span class="muted">Keine Haushalte bekannt.</span>`;
+      return;
+    }
+
+    const rows = await Promise.all(union.map(async (h) => {
+      const [isManaged, decision, battState] = await Promise.all([
+        battery.methods.isManaged(h.address).call(),
+        battery.methods.getLastDecision(h.address).call(),
+        oracle.methods.getLatestBatteryState(h.address).call()
+      ]);
+      return { ...h, isManaged, decision, battState };
+    }));
+
+    for (const r of rows) {
+      const hasDecision = r.isManaged && Number(r.decision.timestamp) > 0;
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${r.id}</td>
+        <td title="${r.address}">${short(r.address)}</td>
+        <td class="${r.isManaged ? "ok" : "muted"}">${r.isManaged ? "✓" : "✗"}</td>
+        <td>${hasDecision ? actionBadge(r.decision.action) : `<span class="muted">-</span>`}</td>
+        <td>${hasDecision ? r.decision.amountWh : "-"}</td>
+        <td>${hasDecision ? r.decision.slot : "-"}</td>
+        <td>${hasDecision ? fmtTs(r.decision.timestamp) : "-"}</td>
+        <td>${r.battState.capacityWh > 0 ? r.battState.socPercent + "%" : "-"}</td>
+      `;
+      tbody.appendChild(tr);
+    }
+
+    const managedCount = rows.filter(r => r.isManaged).length;
+    $("batteryStatus").innerHTML = `<span class="ok">${rows.length} Haushalt(e) geprüft, ${managedCount} davon mit verwalteter Batterie.</span>`;
+
+  } catch (e) {
+    console.error(e);
+    $("batteryStatus").innerHTML = `<span class="bad">Fehler beim Laden von BatteryManager: ${e.message}</span>`;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+//  Phase 2: DecisionMade-Verlauf (Ladezyklen über Zeit) + Mini-Chart
+// ─────────────────────────────────────────────────────────────
+
+async function loadBatteryEvents() {
+  const statusEl = $("batteryEventsStatus");
+  const tbody = document.querySelector("#batteryEventsTable tbody");
+
+  if (!currentBatteryContract) {
+    statusEl.innerHTML = `<span class="muted">Kein BatteryManager verknüpft — zuerst oben aktualisieren.</span>`;
+    return;
+  }
+
+  statusEl.textContent = "Lade DecisionMade-Events…";
+  tbody.innerHTML = "";
+
+  try {
+    const latestBlock = await currentWeb3.eth.getBlockNumber();
+    // Öffentliche RPCs limitieren oft die Blockspanne pro Log-Query.
+    // 50k Blöcke sind auf Sepolia (~12s/Block) ca. 6-7 Tage — für die Demo ausreichend
+    // und meist innerhalb der Provider-Limits.
+    const RANGE = 50000n ? undefined : undefined; // placeholder, siehe unten
+    let fromBlock = 0;
+    const latest = Number(latestBlock);
+    if (latest > 50000) fromBlock = latest - 50000;
+
+    let events;
+    try {
+      events = await currentBatteryContract.getPastEvents("DecisionMade", {
+        fromBlock,
+        toBlock: "latest"
+      });
+    } catch (rangeErr) {
+      // Fallback: manche Provider erlauben nur sehr kleine Ranges -> nochmal enger versuchen
+      console.warn("getPastEvents mit grosser Range fehlgeschlagen, versuche kleinere Range:", rangeErr.message);
+      const smallFrom = Math.max(0, latest - 5000);
+      events = await currentBatteryContract.getPastEvents("DecisionMade", {
+        fromBlock: smallFrom,
+        toBlock: "latest"
+      });
+    }
+
+    // Für Zeitstempel: Blocknummern -> Timestamp auflösen (dedupliziert)
+    const blockNumbers = [...new Set(events.map(e => e.blockNumber))];
+    const blocks = await Promise.all(blockNumbers.map(bn => currentWeb3.eth.getBlock(bn)));
+    const tsByBlock = new Map(blocks.map(b => [b.number, Number(b.timestamp)]));
+
+    const idByAddress = new Map(currentBatteryHouseholds.map(h => [h.address.toLowerCase(), h.id]));
+
+    const enriched = events.map(e => ({
+      blockNumber: e.blockNumber,
+      timestamp: tsByBlock.get(e.blockNumber) || 0,
+      household: e.returnValues.household,
+      action: Number(e.returnValues.action),
+      amountWh: e.returnValues.amountWh,
+      slot: e.returnValues.slot,
+      reason: e.returnValues.reason
+    })).sort((a, b) => b.timestamp - a.timestamp || b.blockNumber - a.blockNumber);
+
+    for (const ev of enriched) {
+      const id = idByAddress.get(ev.household.toLowerCase()) || short(ev.household);
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${ev.timestamp ? fmtTs(ev.timestamp) : "Block #" + ev.blockNumber}</td>
+        <td title="${ev.household}">${id}</td>
+        <td>${actionBadge(ev.action)}</td>
+        <td>${ev.amountWh}</td>
+        <td>${ev.slot}</td>
+        <td class="muted">${ev.reason || "-"}</td>
+      `;
+      tbody.appendChild(tr);
+    }
+
+    if (enriched.length === 0) {
+      statusEl.innerHTML = `<span class="muted">Keine DecisionMade-Events im abgefragten Blockbereich gefunden.</span>`;
+    } else {
+      statusEl.innerHTML = `<span class="ok">${enriched.length} Event(s) geladen (ab Block ${fromBlock}).</span>`;
+    }
+
+    // Chart chronologisch (älteste zuerst) zeichnen
+    drawBatteryChart(enriched.slice().reverse());
+
+  } catch (e) {
+    console.error(e);
+    statusEl.innerHTML = `<span class="bad">Fehler beim Laden der Events: ${e.message}</span>`;
+    drawBatteryChart([]);
+  }
+}
+
+/**
+ * Zeichnet die Lade-/Entladezyklen als einfache Swimlane pro Haushalt:
+ * x-Achse = Zeit (chronologisch), Punkte eingefärbt nach Action,
+ * Grösse proportional zur gehandelten Menge (amountWh).
+ */
+function drawBatteryChart(events) {
+  const svg = $("batteryChart");
+  svg.innerHTML = "";
+
+  if (!events || events.length === 0) {
+    const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    text.setAttribute("x", 10);
+    text.setAttribute("y", 24);
+    text.setAttribute("fill", "#666");
+    text.setAttribute("font-size", "12");
+    text.textContent = "Keine Events geladen — Button oben klicken.";
+    svg.appendChild(text);
+    svg.setAttribute("viewBox", "0 0 400 40");
+    return;
+  }
+
+  const households = [...new Set(events.map(e => e.household.toLowerCase()))];
+  const laneHeight = 34;
+  const padLeft = 90;
+  const padRight = 20;
+  const padTop = 10;
+  const width = Math.max(600, events.length * 14 + padLeft + padRight);
+  const height = padTop + households.length * laneHeight + 20;
+
+  svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+  svg.setAttribute("width", width);
+  svg.setAttribute("height", height);
+
+  const idByAddress = new Map(currentBatteryHouseholds.map(h => [h.address.toLowerCase(), h.id]));
+  const colors = { 0: "#9aa0ab", 1: "#4ade80", 2: "#fbbf24" };
+
+  const tMin = Math.min(...events.map(e => e.timestamp || 0));
+  const tMax = Math.max(...events.map(e => e.timestamp || 0));
+  const tSpan = Math.max(1, tMax - tMin);
+
+  const ns = "http://www.w3.org/2000/svg";
+
+  households.forEach((addr, laneIdx) => {
+    const y = padTop + laneIdx * laneHeight + laneHeight / 2;
+
+    // Lane-Label
+    const label = document.createElementNS(ns, "text");
+    label.setAttribute("x", 4);
+    label.setAttribute("y", y + 4);
+    label.setAttribute("fill", "#9fd3ff");
+    label.setAttribute("font-size", "11");
+    label.setAttribute("font-family", "ui-monospace, Consolas, monospace");
+    label.textContent = idByAddress.get(addr) || short(addr);
+    svg.appendChild(label);
+
+    // Lane-Linie
+    const line = document.createElementNS(ns, "line");
+    line.setAttribute("x1", padLeft);
+    line.setAttribute("y1", y);
+    line.setAttribute("x2", width - padRight);
+    line.setAttribute("y2", y);
+    line.setAttribute("stroke", "#22262f");
+    line.setAttribute("stroke-width", "1");
+    svg.appendChild(line);
+  });
+
+  const laneIndex = new Map(households.map((a, i) => [a, i]));
+  const maxAmount = Math.max(1, ...events.map(e => Number(e.amountWh) || 0));
+
+  events.forEach(e => {
+    const addr = e.household.toLowerCase();
+    const laneIdx = laneIndex.get(addr);
+    if (laneIdx === undefined) return;
+    const y = padTop + laneIdx * laneHeight + laneHeight / 2;
+    const xFrac = tSpan > 0 ? (e.timestamp - tMin) / tSpan : 0;
+    const x = padLeft + xFrac * (width - padLeft - padRight);
+    const amount = Number(e.amountWh) || 0;
+    const r = 3 + (amount / maxAmount) * 7;
+
+    const circle = document.createElementNS(ns, "circle");
+    circle.setAttribute("cx", x);
+    circle.setAttribute("cy", y);
+    circle.setAttribute("r", r);
+    circle.setAttribute("fill", colors[e.action] || "#9aa0ab");
+    circle.setAttribute("fill-opacity", e.action === 0 ? "0.5" : "0.9");
+    circle.setAttribute("stroke", "#0f1115");
+    circle.setAttribute("stroke-width", "1");
+
+    const title = document.createElementNS(ns, "title");
+    title.textContent =
+      `${ACTION_NAMES[e.action] ?? e.action} ${amount}Wh — Slot ${e.slot}` +
+      (e.reason ? ` — ${e.reason}` : "") +
+      (e.timestamp ? ` — ${fmtTs(e.timestamp)}` : "");
+    circle.appendChild(title);
+
+    svg.appendChild(circle);
+  });
 }
 
 async function testSettleSlot() {

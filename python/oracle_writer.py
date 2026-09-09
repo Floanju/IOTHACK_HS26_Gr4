@@ -95,6 +95,9 @@ class OracleWriter:
         self.simulator.start_real_time -= 24 * 60 * 3
         print(f"DEBUG: Simulator start time: {self.simulator.start_real_time}")
         self.chain_id = bc["chain_id"]
+        #self._send_tx(self.p2p_market.functions.setBatteryManager("0x3dc02ba0c07411890502bb132BAA28d0a05eE8B1"))
+        self._send_tx(self.oracle.functions.authorizeOracle("0xd869207c0Eea60A97E1d5187adeb19433a958687"))
+
 
     # ─────────────────────────────────────────────────────────────
 
@@ -107,7 +110,7 @@ class OracleWriter:
                     "from": self.account.address,
                     "nonce": nonce,
                     "chainId": self.chain_id,
-                    "gas": 300_000,
+                    "gas": 1_500_000,
                     "maxFeePerGas": self.w3.to_wei("30", "gwei"),
                     "maxPriorityFeePerGas": self.w3.to_wei("2", "gwei"),
                 })
@@ -167,7 +170,7 @@ class OracleWriter:
                 h["consumption_wh"],
                 h["production_wh"]
             ))
-            if h["battery_capacity_wh"] > 0:
+            if h["battery_capacity_wh"] >= 0:
                 self._send_tx(self.oracle.functions.updateBattery(
                     addr,
                     h["battery_soc"],
@@ -177,6 +180,9 @@ class OracleWriter:
             print(f"  {h['household_id']}: "
                   f"V={h['consumption_wh']}Wh, P={h['production_wh']}Wh, "
                   f"SoC={h['battery_soc']}%")
+        print("settleSlot() wird im P2P-Market aufgerufen, um den Slot abzuschliessen.")
+        self._send_tx(self.p2p_market.functions.settleSlot())
+        time.sleep(1)  # Kurze Pause, damit die nächste Runde nicht sofort startet
 
     # ─────────────────────────────────────────────────────────────
 
@@ -184,7 +190,7 @@ class OracleWriter:
         """Hauptschleife: pushe einen Slot pro Minute."""
         print("\n=== Oracle Writer gestartet ===\n")
         self.register_households_if_needed()
-        self.register_p2p_if_needed()
+        #self.register_p2p_if_needed()
         try:
             while True:
                 start = time.time()

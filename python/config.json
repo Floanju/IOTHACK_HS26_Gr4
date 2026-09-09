@@ -9,7 +9,7 @@
   "households": [
     {
       "id": "house_01",
-      "address": "0x88CFeA9Cac2DabF1da5Af8c339e652b0e129Bd2E",
+      "address": "0x1c5fB3b3abe290003bA31C447c4Bb0957CfC12A9",
       "type": "producer_consumer",
       "pv_peak_kwp": 8.0,
       "battery_capacity_kwh": 10.0,
@@ -18,28 +18,45 @@
     },
     {
       "id": "house_02",
-      "address": "0xBBb0316D8DDF1c0cae9a2D0eb91cfea04Fc9deE7",
+      "address": "0x6AA82D8222147B1146afb4b54AA8B4bA77534C2B",
       "type": "producer_consumer",
       "pv_peak_kwp": 5.0,
-      "battery_capacity_kwh": 7.5,
-      "battery_max_rate_kwh": 2.5,
+      "battery_capacity_kwh": 0,
+      "battery_max_rate_kwh": 0,
       "base_consumption_kwh_per_hour": 0.6
     },
     {
       "id": "house_03",
+      "address": "0x88CFeA9Cac2DabF1da5Af8c339e652b0e129Bd2E",
+      "type": "producer_consumer",
+      "pv_peak_kwp": 0.0,
+      "battery_capacity_kwh": 20.0,
+      "battery_max_rate_kwh": 7.0,
+      "base_consumption_kwh_per_hour": 0.8
+    },
+    {
+      "id": "house_04",
+      "address": "0xBBb0316D8DDF1c0cae9a2D0eb91cfea04Fc9deE7",
+      "type": "consumer_only",
+      "pv_peak_kwp": 0.0,
+      "battery_capacity_kwh": 0.0,
+      "battery_max_rate_kwh": 0.0,
+      "base_consumption_kwh_per_hour": 1.0
+    },
+    {
+      "id": "house_05",
       "address": "0xD35B3D1B1B514971e308cc4BE8e506CaF2a4F100",
       "type": "consumer_only",
       "pv_peak_kwp": 0.0,
       "battery_capacity_kwh": 0.0,
       "battery_max_rate_kwh": 0.0,
-      "base_consumption_kwh_per_hour": 0.8
+      "base_consumption_kwh_per_hour": 0.2
     }
   ],
 
   "weather": {
     "comment": "Tagesgang wird simuliert: Sonnenaufgang bis -untergang",
     "max_irradiance_wm2": 900,
-    "irradiance_wm2": 10,
     "base_temperature_c": 18.0,
     "cloud_cover_pattern": "sinusoidal_with_noise"
   },
@@ -47,9 +64,9 @@
   "blockchain": {
     "rpc_url": "https://ethereum-sepolia-rpc.publicnode.com",
     "chain_id": 11155111,
-    "oracle_storage_address": "0x305b4D43B38805565D6A6046F1C6E7D9c6CD8894",
-    "p2p_market_address": "0xFdFb2f6Aa638AEA368e24FF092929CFcecC7a675",
-    "battery_manager_address": "0xREPLACE_AFTER_DEPLOY",
+    "oracle_storage_address": "0x17F28525b82b703005FF4b3b67fe323e12e6196c",
+    "p2p_market_address": "0x0334329E61788F13868A81211299027E8b07186e",
+    "battery_manager_address": "0x7eB9320520E223F3FCeF6cAf63b34dBb9962D7FA",
     "incentive_controller_address": "0xREPLACE_AFTER_DEPLOY",
     "stablecoin_address": "0x4BaBBaE33998fEd65Ada53bc41CeAa3Cde7F7B46"
   }

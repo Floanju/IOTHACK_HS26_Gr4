@@ -86,6 +86,8 @@ class OracleWriter:
         )
 
         self.simulator = EnergySimulator(CONFIG_PATH)
+        self.simulator.start_real_time -= 24 * 60 * 3
+        print(f"DEBUG: Simulator start time: {self.simulator.start_real_time}")
         self.chain_id = bc["chain_id"]
 
     # ─────────────────────────────────────────────────────────────
@@ -119,9 +121,11 @@ class OracleWriter:
         for h in self.config["households"]:
             addr = Web3.to_checksum_address(h["address"])
             registered = self.oracle.functions.isHouseholdRegistered(addr).call()
-            if not registered:
-                print(f"Registriere Haushalt {h['id']} ({addr}) ...")
-                self._send_tx(self.oracle.functions.registerHousehold(addr))
+            if registered:
+                print(f"Haushalt {h['id']} ({addr}) bereits registriert.")
+                continue
+            print(f"Registriere Haushalt {h['id']} ({addr}) ...")
+            self._send_tx(self.oracle.functions.registerHousehold(addr))
 
     # ─────────────────────────────────────────────────────────────
 

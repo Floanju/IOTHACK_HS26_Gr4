@@ -199,10 +199,171 @@ contract P2PEnergyMarket {
      *    7. Setze lastSettledSlot auf currentSlot
      *    8. Emit SlotSettled
      */
-    function settleSlot() external {
-        // TODO: Implementierung durch Team
+    /// @dev Bündelt die Zwischenergebnisse der Klassifizierung, damit settleSlot()
+    ///      selbst nur wenige lokale Variablen braucht (sonst "Stack too deep").
+    struct NetPosition {
+        address[] producerAddr;
+        uint256[] producerWh;
+        uint256 producerCount;
+        address[] consumerAddr;
+        uint256[] consumerWh;
+        uint256 consumerCount;
+    }
 
-        revert("Not implemented yet - this is your job!");
+    function settleSlot() external {
+        uint256 currentSlot = oracle.getCurrentSlot();
+        require(currentSlot > lastSettledSlot, "Slot already settled");
+
+        NetPosition memory pos = _classifyHouseholds();
+        _sortProducersDesc(pos.producerAddr, pos.producerWh, pos.producerCount);
+
+        (uint256 totalEnergyTraded, uint256 totalPaid) = _matchAndSettle(pos, currentSlot);
+
+        lastSettledSlot = currentSlot;
+        emit SlotSettled(currentSlot, totalEnergyTraded, totalPaid);
+    }
+
+    /// @dev Schritt 1: pro Haushalt Netto berechnen und in Produzenten/Konsumenten trennen.
+    function _classifyHouseholds() internal returns (NetPosition memory pos) {
+        uint256 n = households.length;
+        require(n > 0, "No households registered");
+
+        pos.producerAddr = new address[](n);
+        pos.producerWh = new uint256[](n);
+        pos.consumerAddr = new address[](n);
+        pos.consumerWh = new uint256[](n);
+
+        for (uint256 i = 0; i < n; i++) {
+            address household = households[i];
+            int256 netto = _nettoForHousehold(household);
+
+            if (netto > 0) {
+                pos.producerAddr[pos.producerCount] = household;
+                pos.producerWh[pos.producerCount] = uint256(netto);
+                pos.producerCount++;
+            } else if (netto < 0) {
+                pos.consumerAddr[pos.consumerCount] = household;
+                pos.consumerWh[pos.consumerCount] = uint256(-netto);
+                pos.consumerCount++;
+            }
+        }
+    }
+
+    /// @dev Meter-Netto eines Haushalts inkl. optionaler Batterie-Anpassung (Phase 2).
+    function _nettoForHousehold(address household) internal returns (int256 netto) {
+        IOracleStorage.MeterReading memory reading = oracle.getLatestMeterReading(household);
+        netto = int256(reading.productionWh) - int256(reading.consumptionWh);
+
+        if (address(batteryManager) != address(0) && batteryManager.isManaged(household)) {
+            try batteryManager.decideAction(household) returns (
+                IBatteryManager.Action action,
+                uint256 amountWh
+            ) {
+                if (action == IBatteryManager.Action.CHARGE) {
+                    netto -= int256(amountWh);
+                } else if (action == IBatteryManager.Action.DISCHARGE) {
+                    netto += int256(amountWh);
+                }
+            } catch {
+                // Batterie-Call fehlgeschlagen -> netto bleibt unverändert
+            }
+        }
+    }
+
+    /// @dev Schritt 2: Produzenten absteigend nach Überschuss sortieren (größter zuerst).
+    ///      Selection Sort - unproblematisch bei den hier üblichen kleinen Haushaltszahlen.
+    function _sortProducersDesc(
+        address[] memory addrs,
+        uint256[] memory whs,
+        uint256 count
+    ) internal pure {
+        for (uint256 i = 0; i < count; i++) {
+            uint256 maxIdx = i;
+            for (uint256 j = i + 1; j < count; j++) {
+                if (whs[j] > whs[maxIdx]) {
+                    maxIdx = j;
+                }
+            }
+            if (maxIdx != i) {
+                (whs[i], whs[maxIdx]) = (whs[maxIdx], whs[i]);
+                (addrs[i], addrs[maxIdx]) = (addrs[maxIdx], addrs[i]);
+            }
+        }
+    }
+
+    /// @dev Schritt 3: Waterfall-Matching: Konsument A zahlt Produzent B, bis dessen
+    ///      Überschuss "voll" (verbraucht) ist, dann geht's weiter zu C usw.
+    function _matchAndSettle(NetPosition memory pos, uint256 currentSlot)
+        internal
+        returns (uint256 totalEnergyTraded, uint256 totalPaid)
+    {
+        uint256 pIdx = 0; // Zeiger wandert nur vorwärts - über alle Konsumenten hinweg geteilt,
+                           // damit ein Produzent, der schon "voll" ist, nicht erneut angefragt wird
+
+        for (uint256 c = 0; c < pos.consumerCount; c++) {
+            address consumer = pos.consumerAddr[c];
+            uint256 remainingDebtWh = pos.consumerWh[c];
+            uint256 pricePerKwh = _priceForConsumer(consumer);
+
+            while (remainingDebtWh > 0 && pIdx < pos.producerCount) {
+                if (pos.producerWh[pIdx] == 0) {
+                    pIdx++;
+                    continue;
+                }
+
+                (uint256 tradeWh, uint256 amount) = _settleTrade(
+                    pos.producerAddr[pIdx],
+                    consumer,
+                    remainingDebtWh,
+                    pos.producerWh[pIdx],
+                    pricePerKwh,
+                    currentSlot
+                );
+
+                totalEnergyTraded += tradeWh;
+                totalPaid += amount;
+                remainingDebtWh -= tradeWh;
+                pos.producerWh[pIdx] -= tradeWh;
+
+                // Produzent "voll" (Überschuss aufgebraucht) -> weiter zum nächsten
+                if (pos.producerWh[pIdx] == 0) {
+                    pIdx++;
+                }
+            }
+            // Falls remainingDebtWh > 0 hier: kein Produzent mehr übrig,
+            // Rest-Defizit bleibt unbezahlt (z.B. Bezug vom öffentlichen Netz).
+        }
+    }
+
+    /// @dev [Phase 3] Preis für einen Konsumenten, ggf. via IncentiveController angepasst.
+    function _priceForConsumer(address consumer) internal view returns (uint256 pricePerKwh) {
+        pricePerKwh = energyPricePerKwh;
+        if (address(incentiveController) != address(0)) {
+            uint256 multiplier = incentiveController.getPriceMultiplier(consumer);
+            pricePerKwh = (energyPricePerKwh * multiplier) / 1000;
+        }
+    }
+
+    /// @dev Führt einen einzelnen Teil-Trade aus: Betrag berechnen, Token transferieren, Event emitten.
+    function _settleTrade(
+        address producer,
+        address consumer,
+        uint256 remainingDebtWh,
+        uint256 available,
+        uint256 pricePerKwh,
+        uint256 currentSlot
+    ) internal returns (uint256 tradeWh, uint256 amount) {
+        tradeWh = remainingDebtWh < available ? remainingDebtWh : available;
+        amount = (tradeWh * pricePerKwh) / 1000;
+
+        if (amount > 0) {
+            require(
+                stablecoin.transferFrom(consumer, producer, amount),
+                "Payment transfer failed"
+            );
+        }
+
+        emit EnergyTraded(producer, consumer, tradeWh, amount, currentSlot);
     }
 
     // ─────────────────────────────────────────────────────────────

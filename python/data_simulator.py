@@ -207,6 +207,7 @@ class EnergySimulator:
 
         # Leichtes Rauschen
         kwh_in_slot *= random.uniform(0.9, 1.05)
+        print(f"DEBUG: Household {household_cfg['id']} - PV production: {kwh_in_slot:.3f} kWh (irradiance={weather.irradiance_wm2} W/m²)")
 
         return max(0, int(kwh_in_slot * 1000))
 

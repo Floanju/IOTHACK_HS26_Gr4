@@ -273,7 +273,6 @@ contract P2PEnergyMarket {
         for (uint256 slot = fromSlot; slot <= toSlot; slot++) {
             _settleOneSlot(slot, slot == liveSlot);
         }
-
         lastSettledSlot = toSlot;
     }
 

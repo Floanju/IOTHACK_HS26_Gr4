@@ -1,0 +1,814 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<title>Energy Trading — Admin Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/web3@1.10.4/dist/web3.min.js"></script>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, Segoe UI, Roboto, sans-serif;
+    background: #0f1115;
+    color: #e6e6e6;
+    margin: 0;
+    padding: 24px;
+  }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h2 { font-size: 15px; margin: 0 0 10px; color: #9fd3ff; }
+  .sub { color: #888; font-size: 13px; margin-bottom: 20px; }
+  .panel {
+    background: #171a21;
+    border: 1px solid #2a2e38;
+    border-radius: 8px;
+    padding: 16px 18px;
+    margin-bottom: 16px;
+  }
+  .config-grid {
+    display: grid;
+    grid-template-columns: 140px 1fr;
+    gap: 8px 12px;
+    align-items: center;
+  }
+  .config-grid label { font-size: 12px; color: #aaa; }
+  input[type=text], input[type=number], select {
+    width: 100%;
+    background: #0f1115;
+    border: 1px solid #333944;
+    color: #e6e6e6;
+    border-radius: 4px;
+    padding: 6px 8px;
+    font-family: ui-monospace, Consolas, monospace;
+    font-size: 12px;
+  }
+  button {
+    background: #2b6cb0;
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    padding: 8px 16px;
+    font-size: 13px;
+    cursor: pointer;
+    margin-top: 10px;
+    margin-right: 8px;
+  }
+  button:hover { background: #3a7fca; }
+  button:disabled { background: #333944; cursor: not-allowed; }
+  button.secondary { background: #333944; }
+  button.secondary:hover { background: #444b58; }
+  button.danger { background: #7f1d1d; }
+  button.danger:hover { background: #9f2626; }
+  button.small { padding: 4px 10px; font-size: 12px; margin: 0; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td {
+    text-align: left;
+    padding: 6px 8px;
+    border-bottom: 1px solid #22262f;
+    white-space: nowrap;
+  }
+  th { color: #9fd3ff; font-weight: 600; }
+  .kv { display: grid; grid-template-columns: 220px 1fr; gap: 4px 12px; font-size: 13px; }
+  .kv div.k { color: #9fd3ff; }
+  .kv div.v { font-family: ui-monospace, Consolas, monospace; word-break: break-all; }
+  .ok { color: #4ade80; }
+  .bad { color: #f87171; }
+  .muted { color: #666; }
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    margin-right: 6px;
+    margin-bottom: 4px;
+  }
+  .badge.on { background: #14351f; color: #4ade80; }
+  .badge.off { background: #241417; color: #666; }
+  .log { font-family: ui-monospace, Consolas, monospace; font-size: 12px; white-space: pre-wrap; margin-top: 10px; line-height: 1.5; }
+  .log .step-ok { color: #4ade80; }
+  .log .step-bad { color: #f87171; }
+  .log .step-info { color: #9fd3ff; }
+  .row-actions { display: flex; gap: 6px; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 900px) { .grid2 { grid-template-columns: 1fr; } }
+  #walletBar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+</style>
+</head>
+<body>
+
+<h1>Energy Trading — Admin Dashboard</h1>
+<div class="sub">
+  Schreibende Aktionen über MetaMask. Owner verwaltet Haushalte/Producer
+  (OracleStorage + P2PEnergyMarket), jeder Account kann selbst
+  Stablecoin-Allowance für den Market-Contract erteilen.
+</div>
+
+<div class="panel">
+  <h2>Konfiguration</h2>
+  <div class="config-grid">
+    <label>RPC URL</label>
+    <input type="text" id="cfgRpc">
+
+    <label>OracleStorage</label>
+    <input type="text" id="cfgOracle">
+
+    <label>P2PEnergyMarket</label>
+    <input type="text" id="cfgMarket">
+
+    <label>Stablecoin</label>
+    <input type="text" id="cfgStablecoin">
+  </div>
+  <button onclick="saveConfig()">Speichern</button>
+  <button class="secondary" onclick="resetConfig()">Auf Defaults zurücksetzen</button>
+  <div id="cfgStatus" class="muted" style="margin-top:6px; font-size:12px;"></div>
+</div>
+
+<div class="panel">
+  <h2>Wallet</h2>
+  <div id="walletBar">
+    <button onclick="connectWallet()">MetaMask verbinden</button>
+    <span id="walletAddr" class="muted">Nicht verbunden</span>
+  </div>
+  <div id="signerRow" style="margin-top:8px; display:none;">
+    <label style="font-size:12px; color:#aaa; margin-right:8px;">Signieren als:</label>
+    <select id="signerSelect" onchange="onSignerChange()" style="width:auto; display:inline-block; min-width:220px;"></select>
+  </div>
+  <div id="roleBadges" style="margin-top:10px; overflow-x:auto;"></div>
+  <div id="walletStatus" class="muted" style="margin-top:6px; font-size:12px;"></div>
+</div>
+
+<div class="grid2">
+
+  <div class="panel">
+    <h2>Owner — Haushalt/Producer hinzufügen</h2>
+    <div class="muted" style="font-size:12px; margin-bottom:8px;">
+      Zwei Schritte pro Aktion: (1) OracleStorage.registerHousehold() — braucht
+      einen autorisierten Oracle-Account, (2) P2PEnergyMarket.registerHousehold()
+      bzw. registerProducer() — braucht den Market-Owner. Falls dein verbundener
+      Account nicht beides ist, kann Schritt 1 und 2 von unterschiedlichen Accounts
+      kommen müssen — das Log zeigt dir genau, welcher Schritt scheitert und warum.
+    </div>
+    <label style="font-size:12px; color:#aaa;">Adresse</label>
+    <input type="text" id="addAddress" placeholder="0x...">
+    <button onclick="addEntity('household')">Als Haushalt hinzufügen</button>
+    <button onclick="addEntity('producer')">Als Producer hinzufügen</button>
+    <div id="addLog" class="log"></div>
+  </div>
+
+  <div class="panel">
+    <h2>Selbstbedienung — Stablecoin-Allowance</h2>
+    <div class="muted" style="font-size:12px; margin-bottom:8px;">
+      Damit settleSlot() Zahlungen in deinem Namen abbuchen kann, musst du dem
+      P2PEnergyMarket-Contract vorab ERC-20 approve() erteilen.
+    </div>
+    <div class="kv" id="approveKv" style="margin-bottom:10px;"></div>
+    <label style="font-size:12px; color:#aaa;">Betrag (in Token, leer = unlimited)</label>
+    <input type="text" id="approveAmount" placeholder="z.B. 1000, oder leer lassen">
+    <button onclick="approveMarket()">Approve erteilen</button>
+    <div id="approveLog" class="log"></div>
+  </div>
+
+</div>
+
+<div class="panel">
+  <h2>Haushalte <span class="muted" style="font-weight:400; font-size:12px;">— market.getAllHouseholds()</span></h2>
+  <table id="householdsTable">
+    <thead><tr><th>Adresse</th><th>Oracle reg.</th><th>Market reg.</th><th>Aktion</th></tr></thead>
+    <tbody></tbody>
+  </table>
+  <div id="householdsStatus" class="muted" style="margin-top:8px; font-size:12px;"></div>
+</div>
+
+<div class="panel">
+  <h2>Producers <span class="muted" style="font-weight:400; font-size:12px;">— market.getAllProducers()</span></h2>
+  <table id="producersTable">
+    <thead><tr><th>Adresse</th><th>Oracle reg.</th><th>Market reg.</th><th>Aktion</th></tr></thead>
+    <tbody></tbody>
+  </table>
+  <div id="producersStatus" class="muted" style="margin-top:8px; font-size:12px;"></div>
+</div>
+
+<script>
+// ─────────────────────────────────────────────────────────────
+//  Defaults (aus config.json übernommen) + Persistenz via localStorage,
+//  gleiches Muster wie im Chain Viewer. Kein fetch("../config.json") -
+//  das scheitert unter file:// an CORS. Falls ihr die Seite über einen
+//  lokalen Server ausliefert, könnt ihr configFetchUrl unten setzen.
+// ─────────────────────────────────────────────────────────────
+
+const configFetchUrl = null; // z.B. "../config.json", falls über HTTP(S) ausgeliefert
+
+const DEFAULTS = {
+  rpc: "https://ethereum-sepolia-rpc.publicnode.com",
+  oracle: "0x305b4D43B38805565D6A6046F1C6E7D9c6CD8894",
+  market: "0xFdFb2f6Aa638AEA368e24FF092929CFcecC7a675",
+  stablecoin: "0x4BaBBaE33998fEd65Ada53bc41CeAa3Cde7F7B46"
+};
+
+const ORACLE_ABI = [
+  {"inputs":[{"internalType":"address","name":"household","type":"address"}],"name":"registerHousehold","outputs":[],"stateMutability":"nonpayable","type":"function"},
+  {"inputs":[{"internalType":"address","name":"household","type":"address"}],"name":"isHouseholdRegistered","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"view","type":"function"},
+  {"inputs":[{"internalType":"address","name":"","type":"address"}],"name":"authorizedOracles","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"owner","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"}
+];
+
+const MARKET_ABI = [
+  {"inputs":[{"internalType":"address","name":"household","type":"address"}],"name":"registerHousehold","outputs":[],"stateMutability":"nonpayable","type":"function"},
+  {"inputs":[{"internalType":"address","name":"household","type":"address"}],"name":"unregisterHousehold","outputs":[],"stateMutability":"nonpayable","type":"function"},
+  {"inputs":[{"internalType":"address","name":"producer","type":"address"}],"name":"registerProducer","outputs":[],"stateMutability":"nonpayable","type":"function"},
+  {"inputs":[{"internalType":"address","name":"producer","type":"address"}],"name":"unregisterProducer","outputs":[],"stateMutability":"nonpayable","type":"function"},
+  {"inputs":[{"internalType":"address","name":"","type":"address"}],"name":"isRegistered","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"view","type":"function"},
+  {"inputs":[{"internalType":"address","name":"","type":"address"}],"name":"isRegisteredProducer","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"owner","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"getAllHouseholds","outputs":[{"internalType":"address[]","name":"","type":"address[]"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"getAllProducers","outputs":[{"internalType":"address[]","name":"","type":"address[]"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"stablecoin","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"}
+];
+
+const ERC20_ABI = [
+  {"inputs":[{"internalType":"address","name":"spender","type":"address"},{"internalType":"uint256","name":"amount","type":"uint256"}],"name":"approve","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"nonpayable","type":"function"},
+  {"inputs":[{"internalType":"address","name":"owner","type":"address"},{"internalType":"address","name":"spender","type":"address"}],"name":"allowance","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[{"internalType":"address","name":"account","type":"address"}],"name":"balanceOf","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"decimals","outputs":[{"internalType":"uint8","name":"","type":"uint8"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"symbol","outputs":[{"internalType":"string","name":"","type":"string"}],"stateMutability":"view","type":"function"}
+];
+
+const MAX_UINT256 = (2n ** 256n - 1n).toString();
+const ZERO = "0x0000000000000000000000000000000000000000";
+const $ = id => document.getElementById(id);
+const short = a => a ? a.slice(0,6) + "…" + a.slice(-4) : "-";
+
+let cfg = {};
+let readWeb3, walletWeb3;   // readWeb3: RPC-only (für Tabellen ohne Wallet). walletWeb3: window.ethereum (für Tx).
+let account = null;         // aktuell für .send({from:...}) verwendeter Account (per Dropdown wählbar)
+
+// ─────────────────────────────────────────────────────────────
+//  Config
+// ─────────────────────────────────────────────────────────────
+
+function loadConfigFromStorage() {
+  let saved = null;
+  try { saved = JSON.parse(localStorage.getItem("adminDashboardConfig")); } catch (e) {}
+  return saved || { ...DEFAULTS };
+}
+
+// Liest ?market=0x...&oracle=0x... aus der URL, falls vorhanden - so kann ein
+// Lesezeichen mit bestimmten Contract-Adressen gesetzt werden.
+function readParamFromUrl(name) {
+  const v = new URLSearchParams(window.location.search).get(name);
+  return v ? v.trim() : null;
+}
+
+// Schreibt die aktuell aktiven Adressen als Query-Params in die URL, ohne die
+// Seite neu zu laden (history.replaceState). Dadurch spiegelt die URL immer
+// den aktuellen Stand wider und kann jederzeit als Lesezeichen gespeichert
+// werden. params z.B. { market: "0x...", oracle: "0x..." }.
+function syncParamsToUrl(params) {
+  const url = new URL(window.location.href);
+  for (const [key, value] of Object.entries(params)) {
+    if (value) url.searchParams.set(key, value);
+    else url.searchParams.delete(key);
+  }
+  history.replaceState(null, "", url.toString());
+}
+
+function applyConfigToForm() {
+  $("cfgRpc").value = cfg.rpc;
+  $("cfgOracle").value = cfg.oracle;
+  $("cfgMarket").value = cfg.market;
+  $("cfgStablecoin").value = cfg.stablecoin;
+}
+
+function readConfigFromForm() {
+  return {
+    rpc: $("cfgRpc").value.trim(),
+    oracle: $("cfgOracle").value.trim(),
+    market: $("cfgMarket").value.trim(),
+    stablecoin: $("cfgStablecoin").value.trim()
+  };
+}
+
+function saveConfig() {
+  cfg = readConfigFromForm();
+  localStorage.setItem("adminDashboardConfig", JSON.stringify(cfg));
+  initReadWeb3();
+  if (account) initWalletContracts();
+  syncParamsToUrl({ market: cfg.market, oracle: cfg.oracle });
+  $("cfgStatus").innerHTML = `<span class="ok">Gespeichert. URL aktualisiert - jetzt als Lesezeichen speicherbar.</span>`;
+  refreshLists();
+  if (window._accounts && window._accounts.length > 0) refreshAccountsOverview();
+}
+
+function resetConfig() {
+  localStorage.removeItem("adminDashboardConfig");
+  cfg = { ...DEFAULTS };
+  applyConfigToForm();
+  saveConfig();
+}
+
+async function tryFetchConfig() {
+  if (!configFetchUrl) return null;
+  try {
+    const res = await fetch(configFetchUrl);
+    const json = await res.json();
+    const bc = json.blockchain || {};
+    return {
+      rpc: bc.rpc_url || DEFAULTS.rpc,
+      oracle: bc.oracle_storage_address || DEFAULTS.oracle,
+      market: bc.p2p_market_address || DEFAULTS.market,
+      stablecoin: bc.stablecoin_address || DEFAULTS.stablecoin
+    };
+  } catch (e) {
+    console.warn("config.json fetch fehlgeschlagen, nutze Defaults:", e.message);
+    return null;
+  }
+}
+
+function initReadWeb3() {
+  readWeb3 = new Web3(new Web3.providers.HttpProvider(cfg.rpc));
+}
+
+// ─────────────────────────────────────────────────────────────
+//  Wallet
+// ─────────────────────────────────────────────────────────────
+
+async function connectWallet() {
+  if (!window.ethereum) {
+    alert("MetaMask nicht gefunden. Bitte installieren.");
+    return;
+  }
+  try {
+    const accounts = await window.ethereum.request({ method: "eth_requestAccounts" });
+    window._accounts = accounts;
+    account = accounts[0];
+    walletWeb3 = new Web3(window.ethereum);
+
+    initWalletContracts();
+    renderAccountSelector(accounts);
+    $("walletAddr").innerHTML = `<span class="ok">${accounts.length} Account(s) verbunden</span>`;
+
+    if (accounts.length === 1) {
+      $("walletStatus").innerHTML =
+        `<span class="muted">Nur 1 Account exponiert, obwohl evtl. mehr im Wallet vorhanden sind. ` +
+        `Für mehrere gleichzeitig: MetaMask → Punktmenü → "Verbundene Sites" (oder Website-Icon oben) → ` +
+        `diese Seite auswählen → "Konten bearbeiten" → alle gewünschten Accounts anhaken → hier neu verbinden.</span>`;
+    } else {
+      $("walletStatus").textContent = "";
+    }
+
+    await refreshAccountsOverview();
+    await refreshLists();
+  } catch (e) {
+    console.error(e);
+    $("walletStatus").innerHTML = `<span class="bad">Verbindung fehlgeschlagen: ${e.message}</span>`;
+  }
+}
+
+function renderAccountSelector(accounts) {
+  const sel = $("signerSelect");
+  sel.innerHTML = accounts.map(a => `<option value="${a}">${short(a)}</option>`).join("");
+  sel.value = account;
+  $("signerRow").style.display = accounts.length > 0 ? "block" : "none";
+}
+
+function onSignerChange() {
+  account = $("signerSelect").value;
+  updateApproveKv();
+  renderAccountsOverviewActiveMark();
+}
+
+function updateApproveKv() {
+  const rows = window._perAccountData;
+  if (!rows || !account) return;
+  const r = rows.find(x => x.address.toLowerCase() === account.toLowerCase());
+  const kv = $("approveKv");
+  kv.innerHTML = "";
+  if (!r) {
+    kvRow(kv, "Balance", "?");
+    kvRow(kv, "Aktuelle Allowance an Market", "?");
+    return;
+  }
+  const decimals = window._decimals;
+  const symbol = window._symbol || "";
+  kvRow(kv, "Balance", (r.balance !== null && decimals != null) ? fmtToken(r.balance, decimals) + " " + symbol : "?");
+  kvRow(kv, "Aktuelle Allowance an Market", (r.allowance !== null && decimals != null) ? fmtAllowance(r.allowance, decimals, symbol) : "?");
+}
+
+// Nach Signer-Wechsel nur das "← Signer"-Label in der bereits gerenderten
+// Tabelle neu setzen, ohne alles neu von der Chain zu laden.
+function renderAccountsOverviewActiveMark() {
+  if (window._perAccountData) {
+    renderAccountsTable(window._perAccountData, window._lastOOwner, window._lastMOwner);
+  }
+}
+
+function initWalletContracts() {
+  window.oracleW = new walletWeb3.eth.Contract(ORACLE_ABI, cfg.oracle);
+  window.marketW = new walletWeb3.eth.Contract(MARKET_ABI, cfg.market);
+  window.stablecoinW = new walletWeb3.eth.Contract(ERC20_ABI, cfg.stablecoin);
+}
+
+// Schätzt das benötigte Gas selbst und sendet mit einem festen, moderaten
+// Gas-Limit (statt MetaMask/den RPC-Provider blind schätzen zu lassen).
+// Grund: manche RPC-Provider (z.B. Infura) deckeln das Gas-Limit pro Tx
+// (z.B. bei 16.777.216) - schlägt die Schätzung selbst fehl, weil der Call
+// ohnehin revertieren würde (z.B. weil der Account nicht Owner ist), bekommt
+// man hier sofort eine klare Fehlermeldung statt eines MetaMask-Popups mit
+// einem überzogenen Fallback-Gas-Limit, das am RPC-Cap scheitert.
+async function sendTx(methodCall, fromAccount) {
+  let estimated;
+  try {
+    estimated = await methodCall.estimateGas({ from: fromAccount });
+  } catch (e) {
+    throw new Error(`Simulation fehlgeschlagen (Aktion würde revertieren): ${e.message}`);
+  }
+  const gas = Math.min(Math.ceil(Number(estimated) * 1.3), 1000000);
+  return methodCall.send({ from: fromAccount, gas });
+}
+
+if (window.ethereum) {
+  window.ethereum.on("accountsChanged", async (accounts) => {
+    window._accounts = accounts;
+    if (accounts.length === 0) {
+      account = null;
+      $("walletAddr").textContent = "Nicht verbunden";
+      $("roleBadges").innerHTML = "";
+      $("signerRow").style.display = "none";
+      return;
+    }
+    if (!accounts.includes(account)) account = accounts[0];
+    renderAccountSelector(accounts);
+    $("walletAddr").innerHTML = `<span class="ok">${accounts.length} Account(s) verbunden</span>`;
+    await refreshAccountsOverview();
+  });
+}
+
+// Prüft für JEDEN verbundenen Account parallel alle Rollen (statt nur für
+// accounts[0]) - Ergebnis als Tabelle, eine Zeile pro Account.
+async function refreshAccountsOverview() {
+  if (!window._accounts || window._accounts.length === 0) return;
+  const oracleR = new readWeb3.eth.Contract(ORACLE_ABI, cfg.oracle);
+  const marketR = new readWeb3.eth.Contract(MARKET_ABI, cfg.market);
+  const stablecoinR = new readWeb3.eth.Contract(ERC20_ABI, cfg.stablecoin);
+
+  // Account-unabhängige Werte einmal laden. Producer-Funktionen (getAllProducers)
+  // laufen bewusst als EIGENER, separater Call - nicht in globalCalls - weil ein
+  // Revert hier nichts über eine falsche Adresse aussagt (owner()/isRegistered()
+  // funktionieren ja), sondern eher darauf hindeutet, dass dieses Deployment
+  // schlicht keine Producer-Funktionen im Bytecode hat (älterer Contract-Stand).
+  const globalCalls = [
+    ["Oracle.owner()", () => oracleR.methods.owner().call()],
+    ["Market.owner()", () => marketR.methods.owner().call()],
+    ["Stablecoin.decimals()", () => stablecoinR.methods.decimals().call()],
+    ["Stablecoin.symbol()", () => stablecoinR.methods.symbol().call()]
+  ];
+  const globalResults = await Promise.allSettled(globalCalls.map(([, fn]) => fn()));
+  const globalFailed = [];
+  const getGlobal = (i) => {
+    if (globalResults[i].status === "fulfilled") return globalResults[i].value;
+    globalFailed.push(`${globalCalls[i][0]}: ${globalResults[i].reason.message}`);
+    return null;
+  };
+  const oOwner = getGlobal(0);
+  const mOwner = getGlobal(1);
+  const decimals = getGlobal(2);
+  const symbol = getGlobal(3) || "";
+
+  if (decimals !== null) {
+    window._decimals = Number(decimals);
+    window._symbol = symbol;
+  }
+  window._lastOOwner = oOwner;
+  window._lastMOwner = mOwner;
+
+  let producersSupported = true;
+  let producerSet = new Set();
+  try {
+    const allProducers = await marketR.methods.getAllProducers().call();
+    producerSet = new Set(allProducers.map(a => a.toLowerCase()));
+  } catch (e) {
+    producersSupported = false;
+  }
+  window._producersSupported = producersSupported;
+
+  // Pro Account: die 4 account-abhängigen Werte, parallel über alle Accounts.
+  const perAccount = await Promise.all(window._accounts.map(async (acct) => {
+    const calls = [
+      ["authorizedOracles", () => oracleR.methods.authorizedOracles(acct).call()],
+      ["isRegistered", () => marketR.methods.isRegistered(acct).call()],
+      ["balanceOf", () => stablecoinR.methods.balanceOf(acct).call()],
+      ["allowance", () => stablecoinR.methods.allowance(acct, cfg.market).call()]
+    ];
+    const results = await Promise.allSettled(calls.map(([, fn]) => fn()));
+    const failed = [];
+    const get = (i) => {
+      if (results[i].status === "fulfilled") return results[i].value;
+      failed.push(`${calls[i][0]}: ${results[i].reason.message}`);
+      return null;
+    };
+    return {
+      address: acct,
+      isOracle: get(0),
+      isHousehold: get(1),
+      isProducer: producersSupported ? producerSet.has(acct.toLowerCase()) : null,
+      balance: get(2),
+      allowance: get(3),
+      failed
+    };
+  }));
+
+  renderAccountsTable(perAccount, oOwner, mOwner);
+  window._perAccountData = perAccount;
+  updateApproveKv();
+
+  const anyRowFailed = perAccount.some(r => r.failed.length > 0);
+  const statusParts = [];
+  if (globalFailed.length > 0 || anyRowFailed) {
+    const lines = [...globalFailed];
+    perAccount.forEach(r => r.failed.forEach(f => lines.push(`${short(r.address)}: ${f}`)));
+    statusParts.push(
+      `<span class="bad">Einzelne Calls fehlgeschlagen - vermutlich falsche/veraltete Contract-Adresse ` +
+      `in der Konfiguration oben (mit "Auf Defaults zurücksetzen" prüfen):<br>` +
+      lines.map(f => "• " + f).join("<br>") + `</span>`
+    );
+  }
+  if (!producersSupported) {
+    statusParts.push(
+      `<span class="muted">Hinweis: getAllProducers() revertet auf diesem Market-Contract, obwohl owner()/isRegistered() ` +
+      `funktionieren. Das deutet eher auf ein älteres Deployment ohne Producer-Support hin als auf eine falsche Adresse - ` +
+      `Producer-Spalte wird deshalb als "?" angezeigt statt als "nein".</span>`
+    );
+  }
+  $("walletStatus").innerHTML = statusParts.join("<br>");
+}
+
+function renderAccountsTable(rows, oOwner, mOwner) {
+  const decimals = window._decimals;
+  const symbol = window._symbol || "";
+  const cell = (val) => val === null
+    ? '<span class="muted">?</span>'
+    : (val ? '<span class="ok">✓</span>' : '<span class="muted">—</span>');
+
+  const bodyRows = rows.map(r => {
+    const isMarketOwner = mOwner !== null ? mOwner.toLowerCase() === r.address.toLowerCase() : null;
+    const isOracleOwner = oOwner !== null ? oOwner.toLowerCase() === r.address.toLowerCase() : null;
+    const balTxt = (r.balance !== null && decimals != null) ? fmtToken(r.balance, decimals) + " " + symbol : "?";
+    const allowTxt = (r.allowance !== null && decimals != null) ? fmtAllowance(r.allowance, decimals, symbol) : "?";
+    const activeMark = r.address === account ? " ← Signer" : "";
+    return `
+      <tr>
+        <td title="${r.address}">${short(r.address)}${activeMark}</td>
+        <td>${cell(isMarketOwner)}</td>
+        <td>${cell(isOracleOwner)}</td>
+        <td>${cell(r.isOracle)}</td>
+        <td>${cell(r.isHousehold)}</td>
+        <td>${cell(r.isProducer)}</td>
+        <td>${balTxt}</td>
+        <td>${allowTxt}</td>
+      </tr>`;
+  }).join("");
+
+  $("roleBadges").innerHTML = `
+    <table>
+      <thead>
+        <tr>
+          <th>Account</th><th>Market Owner</th><th>Oracle Owner</th>
+          <th>Oracle-Autorisiert</th><th>Haushalt</th><th>Producer</th>
+          <th>Balance</th><th>Allowance</th>
+        </tr>
+      </thead>
+      <tbody>${bodyRows}</tbody>
+    </table>`;
+}
+
+function kvRow(container, key, value, cls) {
+  const k = document.createElement("div"); k.className = "k"; k.textContent = key;
+  const v = document.createElement("div"); v.className = "v" + (cls ? " " + cls : ""); v.textContent = value;
+  container.appendChild(k); container.appendChild(v);
+}
+
+function fmtToken(raw, decimals) {
+  const d = Number(decimals);
+  return (Number(BigInt(raw)) / 10 ** d).toString();
+}
+
+function fmtAllowance(raw, decimals, symbol) {
+  if (raw === MAX_UINT256) return "Unlimited";
+  return fmtToken(raw, decimals) + " " + symbol;
+}
+
+// Wandelt einen vom Nutzer eingegebenen Token-Betrag ("1000", "0.5") in die
+// kleinste Einheit um, ohne Float-Rundungsfehler bei größeren Beträgen.
+function toTokenUnits(amountStr, decimals) {
+  amountStr = amountStr.trim();
+  const [whole, frac = ""] = amountStr.split(".");
+  const fracPadded = (frac + "0".repeat(decimals)).slice(0, decimals);
+  const wholeDigits = whole === "" ? "0" : whole;
+  return BigInt(wholeDigits) * (10n ** BigInt(decimals)) + BigInt(fracPadded || "0");
+}
+
+// ─────────────────────────────────────────────────────────────
+//  Owner: Haushalt/Producer hinzufügen
+// ─────────────────────────────────────────────────────────────
+
+function log(elId, msg, cls) {
+  const el = $(elId);
+  const line = document.createElement("div");
+  if (cls) line.className = cls;
+  line.textContent = msg;
+  el.appendChild(line);
+}
+
+async function addEntity(kind) {
+  if (!account) { alert("Bitte zuerst Wallet verbinden."); return; }
+  const addrRaw = $("addAddress").value.trim();
+  let addr;
+  try { addr = Web3.utils.toChecksumAddress(addrRaw); }
+  catch (e) { alert("Ungültige Adresse."); return; }
+
+  $("addLog").innerHTML = "";
+  log("addLog", `Adresse: ${addr}`, "step-info");
+  log("addLog", `Ziel-Rolle: ${kind === "producer" ? "Producer" : "Haushalt"}`, "step-info");
+
+  const oracleR = new readWeb3.eth.Contract(ORACLE_ABI, cfg.oracle);
+  const marketR = new readWeb3.eth.Contract(MARKET_ABI, cfg.market);
+
+  // Schritt 1: OracleStorage.registerHousehold() - Oracle unterscheidet nicht
+  // zwischen Haushalt und Producer, beide müssen hier registriert sein.
+  try {
+    const alreadyInOracle = await oracleR.methods.isHouseholdRegistered(addr).call();
+    if (alreadyInOracle) {
+      log("addLog", "Schritt 1/2 (Oracle): bereits registriert, übersprungen.", "step-ok");
+    } else {
+      log("addLog", "Schritt 1/2 (Oracle): sende registerHousehold() ...", "step-info");
+      await sendTx(window.oracleW.methods.registerHousehold(addr), account);
+      log("addLog", "Schritt 1/2 (Oracle): ✓ erfolgreich.", "step-ok");
+    }
+  } catch (e) {
+    log("addLog", `Schritt 1/2 (Oracle): ✗ fehlgeschlagen - ${e.message}`, "step-bad");
+    log("addLog", "Abgebrochen - Schritt 2 braucht eine erfolgreiche Oracle-Registrierung.", "step-bad");
+    return;
+  }
+
+  // Schritt 2: P2PEnergyMarket.registerHousehold() bzw. registerProducer()
+  try {
+    // isRegisteredProducer(addr) revertet konsistent (siehe refreshAccountsOverview) -
+    // Mitgliedschaft daher über getAllProducers() prüfen statt über den Einzel-Call.
+    // Falls auch das revertet (Contract ohne Producer-Support), NICHT abbrechen -
+    // stattdessen die eigentliche registerProducer()-Aktion versuchen, die dann
+    // ihren eigenen, aussagekräftigeren Fehler liefert.
+    let alreadyInMarket = false;
+    if (kind === "producer") {
+      try {
+        const list = await marketR.methods.getAllProducers().call();
+        alreadyInMarket = list.some(a => a.toLowerCase() === addr.toLowerCase());
+      } catch (e) {
+        log("addLog", `Hinweis: Producer-Liste nicht abrufbar (${e.message}) - versuche Registrierung trotzdem.`, "step-info");
+      }
+    } else {
+      alreadyInMarket = await marketR.methods.isRegistered(addr).call();
+    }
+
+    if (alreadyInMarket) {
+      log("addLog", "Schritt 2/2 (Market): bereits registriert, übersprungen.", "step-ok");
+    } else {
+      const fnName = kind === "producer" ? "registerProducer" : "registerHousehold";
+      log("addLog", `Schritt 2/2 (Market): sende ${fnName}() ...`, "step-info");
+      await sendTx(window.marketW.methods[fnName](addr), account);
+      log("addLog", "Schritt 2/2 (Market): ✓ erfolgreich.", "step-ok");
+    }
+  } catch (e) {
+    log("addLog", `Schritt 2/2 (Market): ✗ fehlgeschlagen - ${e.message}`, "step-bad");
+    return;
+  }
+
+  log("addLog", "Fertig.", "step-ok");
+  await refreshLists();
+}
+
+async function removeEntity(kind, addr) {
+  if (!account) { alert("Bitte zuerst Wallet verbinden."); return; }
+  const fnName = kind === "producer" ? "unregisterProducer" : "unregisterHousehold";
+  const statusId = kind === "producer" ? "producersStatus" : "householdsStatus";
+  $(statusId).innerHTML = `<span class="muted">Entferne ${short(addr)} ...</span>`;
+  try {
+    await sendTx(window.marketW.methods[fnName](addr), account);
+    $(statusId).innerHTML = `<span class="ok">✓ ${short(addr)} entfernt (nur aus P2PEnergyMarket - Oracle-Registrierung bleibt bestehen, dafür gibt es dort keine Unregister-Funktion).</span>`;
+  } catch (e) {
+    $(statusId).innerHTML = `<span class="bad">✗ Fehlgeschlagen: ${e.message}</span>`;
+  }
+  await refreshLists();
+}
+
+// ─────────────────────────────────────────────────────────────
+//  Selbstbedienung: Approve
+// ─────────────────────────────────────────────────────────────
+
+async function approveMarket() {
+  if (!account) { alert("Bitte zuerst Wallet verbinden."); return; }
+  $("approveLog").innerHTML = "";
+
+  const amountRaw = $("approveAmount").value.trim();
+  let amountUnits;
+  try {
+    if (amountRaw === "") {
+      amountUnits = MAX_UINT256;
+      log("approveLog", "Kein Betrag angegeben -> unlimited approve.", "step-info");
+    } else {
+      const decimals = window._decimals ?? 6;
+      amountUnits = toTokenUnits(amountRaw, decimals).toString();
+      log("approveLog", `Betrag: ${amountRaw} ${window._symbol || ""} (${amountUnits} kleinste Einheiten)`, "step-info");
+    }
+
+    log("approveLog", "Sende approve() ...", "step-info");
+    await sendTx(window.stablecoinW.methods.approve(cfg.market, amountUnits), account);
+    log("approveLog", "✓ Erfolgreich.", "step-ok");
+    await refreshAccountsOverview();
+  } catch (e) {
+    log("approveLog", `✗ Fehlgeschlagen: ${e.message}`, "step-bad");
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+//  Listen (Haushalte / Producers)
+// ─────────────────────────────────────────────────────────────
+
+async function refreshLists() {
+  if (!cfg.oracle || !cfg.market) return;
+  const oracleR = new readWeb3.eth.Contract(ORACLE_ABI, cfg.oracle);
+  const marketR = new readWeb3.eth.Contract(MARKET_ABI, cfg.market);
+
+  await Promise.all([
+    renderList(oracleR, marketR, "households", "householdsTable", "householdsStatus"),
+    renderList(oracleR, marketR, "producers", "producersTable", "producersStatus")
+  ]);
+}
+
+async function renderList(oracleR, marketR, kind, tableId, statusId) {
+  const tbody = document.querySelector(`#${tableId} tbody`);
+  tbody.innerHTML = "";
+  $(statusId).textContent = "Lade…";
+
+  try {
+    const addrs = kind === "producers"
+      ? await marketR.methods.getAllProducers().call()
+      : await marketR.methods.getAllHouseholds().call();
+
+    if (addrs.length === 0) {
+      $(statusId).innerHTML = `<span class="muted">Keine Einträge.</span>`;
+      return;
+    }
+
+    const rows = await Promise.all(addrs.map(async (addr) => {
+      const oracleReg = await oracleR.methods.isHouseholdRegistered(addr).call();
+      return { addr, oracleReg };
+    }));
+
+    for (const r of rows) {
+      const tr = document.createElement("tr");
+      const kindArg = kind === "producers" ? "producer" : "household";
+      tr.innerHTML = `
+        <td title="${r.addr}">${short(r.addr)}</td>
+        <td class="${r.oracleReg ? "ok" : "bad"}">${r.oracleReg ? "✓" : "✗"}</td>
+        <td class="ok">✓</td>
+        <td><button class="small danger" onclick="removeEntity('${kindArg}', '${r.addr}')">Entfernen</button></td>
+      `;
+      tbody.appendChild(tr);
+    }
+    $(statusId).innerHTML = `<span class="ok">${rows.length} Eintrag/Einträge.</span>`;
+  } catch (e) {
+    console.error(e);
+    if (kind === "producers") {
+      $(statusId).innerHTML =
+        `<span class="muted">Producer-Funktionen scheinen auf diesem Contract nicht zu existieren ` +
+        `(getAllProducers() revertet) - vermutlich ein Deployment ohne Producer-Support. ` +
+        `Haushalte sind davon nicht betroffen.</span>`;
+    } else {
+      $(statusId).innerHTML = `<span class="bad">Fehler: ${e.message}</span>`;
+    }
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+//  Init
+// ─────────────────────────────────────────────────────────────
+
+async function init() {
+  cfg = loadConfigFromStorage();
+  const fetched = await tryFetchConfig();
+  if (fetched) cfg = fetched;
+
+  const urlMarket = readParamFromUrl("market");
+  const urlOracle = readParamFromUrl("oracle");
+  if (urlMarket) cfg.market = urlMarket;
+  if (urlOracle) cfg.oracle = urlOracle;
+
+  applyConfigToForm();
+  initReadWeb3();
+  syncParamsToUrl({ market: cfg.market, oracle: cfg.oracle });
+  await refreshLists();
+}
+
+init();
+</script>
+
+</body>
+</html>

@@ -47,8 +47,8 @@
   "blockchain": {
     "rpc_url": "https://ethereum-sepolia-rpc.publicnode.com",
     "chain_id": 11155111,
-    "oracle_storage_address": "0x305b4D43B38805565D6A6046F1C6E7D9c6CD8894",
-    "p2p_market_address": "0xFdFb2f6Aa638AEA368e24FF092929CFcecC7a675",
+    "oracle_storage_address": "0x17F28525b82b703005FF4b3b67fe323e12e6196c",
+    "p2p_market_address": "0xe609707c25b480E31EC2Ffcd2b40112b3ae4F65e",
     "battery_manager_address": "0xREPLACE_AFTER_DEPLOY",
     "incentive_controller_address": "0xREPLACE_AFTER_DEPLOY",
     "stablecoin_address": "0x4BaBBaE33998fEd65Ada53bc41CeAa3Cde7F7B46"

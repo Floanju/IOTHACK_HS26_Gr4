@@ -46,9 +46,20 @@ contract P2PEnergyMarket {
     address[] public households;
     mapping(address => bool) public isRegistered;
 
+    address[] public producers;
+    mapping(address => bool) public isRegisteredProducer;
+
     /// @notice Energiepreis in Token-Einheiten pro kWh (6 Decimals).
     /// @dev Beispiel: 100_000 = 0.10 Token / kWh
     uint256 public energyPricePerKwh = 100_000;
+
+    /// @notice Preis (Token-Einheiten pro kWh, 6 Decimals), den ein Haushalt für an
+    ///         einen Producer verkaufte Energie erhält (z.B. Feed-in-/Rückkauftarif).
+    uint256 public householdToProducerPrice = 100_000;
+
+    /// @notice Preis (Token-Einheiten pro kWh, 6 Decimals), den ein Haushalt für von
+    ///         einem Producer bezogene Energie zahlt (z.B. Netzbezug/Import-Tarif).
+    uint256 public producerToHouseholdPrice = 100_000;
 
     /// @notice Letzter abgerechneter Slot, um Doppelabrechnung zu verhindern
     uint256 public lastSettledSlot;
@@ -81,6 +92,9 @@ contract P2PEnergyMarket {
     // ─────────────────────────────────────────────────────────────
 
     event HouseholdRegistered(address indexed household);
+    event HouseholdUnregistered(address indexed household);
+    event ProducerRegistered(address indexed producer);
+    event ProducerUnregistered(address indexed producer);
     event EnergyTraded(
         address indexed producer,
         address indexed consumer,
@@ -90,6 +104,8 @@ contract P2PEnergyMarket {
     );
     event SlotSettled(uint256 indexed slot, uint256 totalEnergyTraded, uint256 totalPaid);
     event PriceUpdated(uint256 newPricePerKwh);
+    event HouseholdToProducerPriceUpdated(uint256 newPrice);
+    event ProducerToHouseholdPriceUpdated(uint256 newPrice);
     event BatteryManagerUpdated(address indexed batteryManager);
     event IncentiveControllerUpdated(address indexed incentiveController);
 
@@ -129,9 +145,62 @@ contract P2PEnergyMarket {
         emit HouseholdRegistered(household);
     }
 
+    /// @notice Entfernt einen Haushalt wieder aus dem Marktplatz.
+    /// @dev Betrifft nur die Registrierung hier in P2PEnergyMarket - die Registrierung
+    ///      im OracleStorage-Contract bleibt unberührt (separate Zuständigkeit).
+    function unregisterHousehold(address household) external onlyOwner {
+        require(isRegistered[household], "Not registered");
+        isRegistered[household] = false;
+        _removeFromArray(households, household);
+        emit HouseholdUnregistered(household);
+    }
+
+    /// @notice Registriert einen Producer (z.B. Netz-/Utility-Backstop für Kauf
+    ///         von Haushalts-Überschuss bzw. Verkauf bei Haushalts-Defizit).
+    function registerProducer(address producer) external onlyOwner {
+        require(!isRegisteredProducer[producer], "Already registered");
+        producers.push(producer);
+        isRegisteredProducer[producer] = true;
+        emit ProducerRegistered(producer);
+    }
+
+    /// @notice Entfernt einen Producer wieder aus dem Marktplatz.
+    function unregisterProducer(address producer) external onlyOwner {
+        require(isRegisteredProducer[producer], "Not registered");
+        isRegisteredProducer[producer] = false;
+        _removeFromArray(producers, producer);
+        emit ProducerUnregistered(producer);
+    }
+
+    /// @dev Entfernt `target` aus einem Storage-Array (swap-with-last + pop).
+    ///      Reihenfolge der verbleibenden Einträge ist danach nicht mehr garantiert -
+    ///      wie bisher schon bei households gibt es keine dokumentierte Ordnungsgarantie.
+    function _removeFromArray(address[] storage arr, address target) internal {
+        uint256 len = arr.length;
+        for (uint256 i = 0; i < len; i++) {
+            if (arr[i] == target) {
+                arr[i] = arr[len - 1];
+                arr.pop();
+                break;
+            }
+        }
+    }
+
     function setEnergyPrice(uint256 newPricePerKwh) external onlyOwner {
         energyPricePerKwh = newPricePerKwh;
         emit PriceUpdated(newPricePerKwh);
+    }
+
+    /// @notice Setzt den Preis für Verkäufe Haushalt -> Producer (Feed-in/Rückkauf).
+    function setHouseholdToProducerPrice(uint256 newPrice) external onlyOwner {
+        householdToProducerPrice = newPrice;
+        emit HouseholdToProducerPriceUpdated(newPrice);
+    }
+
+    /// @notice Setzt den Preis für Käufe Producer -> Haushalt (Netzbezug/Import).
+    function setProducerToHouseholdPrice(uint256 newPrice) external onlyOwner {
+        producerToHouseholdPrice = newPrice;
+        emit ProducerToHouseholdPriceUpdated(newPrice);
     }
 
     /// @notice Verknüpft optional den BatteryManager-Contract (Phase 2).
@@ -384,6 +453,14 @@ contract P2PEnergyMarket {
 
     function getAllHouseholds() external view returns (address[] memory) {
         return households;
+    }
+
+    function getProducerCount() external view returns (uint256) {
+        return producers.length;
+    }
+
+    function getAllProducers() external view returns (address[] memory) {
+        return producers;
     }
 
     /// @notice Helper: Berechnet den Token-Betrag für eine Energiemenge

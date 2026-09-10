@@ -20,19 +20,19 @@
       "id": "house_02",
       "address": "0x6AA82D8222147B1146afb4b54AA8B4bA77534C2B",
       "type": "producer_consumer",
-      "pv_peak_kwp": 15.0,
-      "battery_capacity_kwh": 20.0,
-      "battery_max_rate_kwh": 10.0,
-      "base_consumption_kwh_per_hour": 0.8
+      "pv_peak_kwp": 5.0,
+      "battery_capacity_kwh": 5.0,
+      "battery_max_rate_kwh": 5.0,
+      "base_consumption_kwh_per_hour": 0.6
     },
     {
       "id": "house_03",
       "address": "0x88CFeA9Cac2DabF1da5Af8c339e652b0e129Bd2E",
       "type": "consumer_only",
       "pv_peak_kwp": 0.0,
-      "battery_capacity_kwh": 0,
-      "battery_max_rate_kwh": 0,
-      "base_consumption_kwh_per_hour": 0.5
+      "battery_capacity_kwh": 0.0,
+      "battery_max_rate_kwh": 0.0,
+      "base_consumption_kwh_per_hour": 0.8
     },
     {
       "id": "house_04",
@@ -41,7 +41,7 @@
       "pv_peak_kwp": 0.0,
       "battery_capacity_kwh": 0.0,
       "battery_max_rate_kwh": 0.0,
-      "base_consumption_kwh_per_hour": 1.0
+      "base_consumption_kwh_per_hour": 11.0
     }
   ],
 
@@ -60,10 +60,10 @@
   "blockchain": {
     "rpc_url": "https://ethereum-sepolia-rpc.publicnode.com",
     "chain_id": 11155111,
-    "oracle_storage_address": "0x5EE9977D8558f31c8b184e5D0607ad1434A63B4d",
-    "p2p_market_address": "0xFA0DC2555b02463d836107b1399e5f3f2A1e70A8",
-    "battery_manager_address": "0x1f8e9dFFB356c5D6D0ba59BCB48bc084c99e291B",
-    "incentive_controller_address": "0xREPLACE_AFTER_DEPLOY",
+    "oracle_storage_address": "0xBB35D3977314Af488086944511956ab667a1bE1C",
+    "p2p_market_address": "0x452cf3c1aed6e3e0285F4720A8Fa0cb538F4eA3b",
+    "battery_manager_address": "0x6abcF3A781b6faE9E9D4Fb793e3b186ffcd8e1F6",
+    "incentive_controller_address": "0x803A957f15ffADb49b213e9BE635AD8391B20D17",
     "stablecoin_address": "0x4BaBBaE33998fEd65Ada53bc41CeAa3Cde7F7B46"
   }
 }

@@ -1,10 +1,19 @@
 <div id="shared-header-ui">
-  <div class="topnav">
-    <a href="#" id="navHome">Home</a>
-    <a href="#" id="navAdmin">Admin</a>
-    <a href="#" id="navSelfservice">Self-Service</a>
-    <a href="#" id="navTransactions">Transactions</a>
-    <a href="#" id="navOverview">Overview</a>
+  <div class="header-top">
+    <div class="topnav">
+      <a href="#" id="navHome">Home</a>
+      <a href="#" id="navAdmin">Admin</a>
+      <a href="#" id="navSelfservice">Self-Service</a>
+      <a href="#" id="navTransactions">Transactions</a>
+      <a href="#" id="navOverview">Overview</a>
+    </div>
+    <button type="button" id="settingsToggle" class="icon-btn" onclick="toggleSettings()"
+            title="Deployment settings" aria-label="Deployment settings" aria-expanded="false" aria-controls="deploymentPanel">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="3"></circle>
+        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+      </svg>
+    </button>
   </div>
 
   <div id="missingParamsBanner" class="banner warn" style="display:none;">
@@ -12,7 +21,7 @@
     click "Load" — there are no built-in defaults, this page only works with an explicit deployment.
   </div>
 
-  <div class="panel">
+  <div class="panel settings-panel" id="deploymentPanel" style="display:none;">
     <h2>Deployment</h2>
     <div class="config-grid">
       <label>OracleStorage</label>
@@ -35,7 +44,7 @@
     <div id="cfgStatus" class="muted" style="margin-top:6px; font-size:12px;"></div>
   </div>
 
-  <div class="panel">
+  <div class="panel" id="walletPanel">
     <h2>Wallet</h2>
     <div class="hint">
       Connect as many accounts as you need in one go (MetaMask → connected sites → edit accounts)

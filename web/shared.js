@@ -168,6 +168,19 @@ function setupNav() {
     }
 }
 
+function toggleSettings(forceOpen) {
+    const panels = document.querySelectorAll(".settings-panel");
+    if (panels.length === 0) return;
+    const btn = $("settingsToggle");
+    const currentlyOpen = panels[0].style.display !== "none";
+    const shouldOpen = forceOpen !== undefined ? forceOpen : !currentlyOpen;
+    panels.forEach(p => { p.style.display = shouldOpen ? "block" : "none"; });
+    if (btn) {
+        btn.classList.toggle("active", shouldOpen);
+        btn.setAttribute("aria-expanded", String(shouldOpen));
+    }
+}
+
 function applyConfigToForm() {
     if ($("cfgOracle")) $("cfgOracle").value = cfg.oracle || "";
     if ($("cfgMarket")) $("cfgMarket").value = cfg.market || "";
@@ -350,6 +363,7 @@ async function initGlobal() {
 
     if (!cfg.oracle || !cfg.market) {
         if ($("missingParamsBanner")) $("missingParamsBanner").style.display = "block";
+        toggleSettings(true);
         return;
     }
 

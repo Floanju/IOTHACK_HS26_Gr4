@@ -6,29 +6,6 @@
 <title>Energy Trading — Self-Service</title>
 
 <link rel="stylesheet" href="../shared.css">
-<style>
-  /* Interactive table row styling */
-  #accountsTable tbody tr {
-    transition: background 0.2s ease, box-shadow 0.2s ease;
-    cursor: pointer;
-  }
-  #accountsTable tbody tr:hover:not(.selected-row) {
-    background-color: #1c232c;
-  }
-  #accountsTable tbody tr.selected-row {
-    /* Modern dark green with a subtle diagonal texture */
-    background: linear-gradient(135deg, #0d2815 0%, #153c20 100%), 
-                repeating-linear-gradient(45deg, transparent, transparent 4px, rgba(255,255,255,0.02) 4px, rgba(255,255,255,0.02) 8px);
-    box-shadow: inset 0 0 0 1px #1e5e31;
-  }
-  #accountsTable tbody td {
-    vertical-align: middle;
-  }
-  input[type="radio"] {
-    cursor: pointer;
-    accent-color: #4ade80;
-  }
-</style>
 
 <script src="https://cdn.jsdelivr.net/npm/web3@1.10.4/dist/web3.min.js"></script>
 <script src="../shared.js"></script>
@@ -39,11 +16,10 @@
 
 <!-- We keep this hidden initially, it gets moved INTO the header's Wallet panel -->
 <div id="customWalletUI" style="display:none;">
-  <div id="accountsTableWrap" style="margin-top:16px; margin-bottom:16px; overflow-x:auto;">
-    <table id="accountsTable">
-      <thead><tr><th>Select</th><th>Account</th><th>Balance</th><th>Allowance to market</th></tr></thead>
-      <tbody><tr><td colspan="4" class="muted">No accounts connected.</td></tr></tbody>
-    </table>
+  <div id="accountsTableWrap" style="margin-top:16px; margin-bottom:16px;">
+    <div id="accountsList" class="acct-list">
+      <div class="muted">No accounts connected.</div>
+    </div>
   </div>
   <div style="background: #14161b; padding: 12px 16px; border-radius: 6px; border: 1px solid #22262f;">
     <label style="font-size:12px; color:#aaa; display:block; margin-bottom:8px;">Approve Stablecoin Allowance (in tokens, blank = unlimited)</label>
@@ -76,12 +52,6 @@
     })
     .catch(e => console.error("Failed to load header.html:", e));
 </script>
-
-<h1>Energy Trading — Self-Service</h1>
-<div class="sub">
-  Grant the P2PEnergyMarket contract an ERC-20 allowance on your stablecoin so settleSlot()
-  can transfer payments on your behalf when you're a net consumer.
-</div>
 
 <script>
 // Override shared.js's generic renderRolesTable function.
@@ -142,11 +112,10 @@ async function refreshAccountsData() {
 
 function updateApproveKv() {
   const rows = window._approveAccountData;
-  const tbody = document.querySelector("#accountsTable tbody");
-  tbody.innerHTML = "";
-  
+  const list = $("accountsList");
+
   if (!rows || rows.length === 0) {
-    tbody.innerHTML = "<tr><td colspan='4' class='muted'>No accounts connected.</td></tr>";
+    list.innerHTML = "<div class='muted'>No accounts connected.</div>";
     return;
   }
 
@@ -158,36 +127,28 @@ function updateApproveKv() {
   const decimals = window._decimals;
   const symbol = window._symbol || "";
 
-  rows.forEach(r => {
-    const tr = document.createElement("tr");
+  list.innerHTML = rows.map(r => {
     const isSelected = selectedApproveAccount === r.address.toLowerCase();
     const isActive = r.address.toLowerCase() === window._accounts[0].toLowerCase();
-
-    // Add visual styling class if selected
-    if (isSelected) tr.classList.add("selected-row");
 
     const balStr = (r.balance !== null && decimals != null) ? fmtToken(r.balance, decimals) + " " + symbol : "?";
     const allStr = (r.allowance !== null && decimals != null) ? fmtAllowance(r.allowance, decimals, symbol) : "?";
 
-    tr.onclick = (e) => {
-      // Prevent double triggering if they clicked directly on the radio button
-      if (e.target.tagName !== 'INPUT') {
-        const radio = tr.querySelector('input[type="radio"]');
-        if (radio) radio.checked = true;
-      }
-      selectAccount(r.address);
-    };
-
-    tr.innerHTML = `
-      <td style="text-align:center; width: 40px;">
-        <input type="radio" name="accountSelect" value="${r.address}" ${isSelected ? "checked" : ""} onchange="selectAccount('${r.address}')">
-      </td>
-      <td title="${r.address}">${short(r.address)}${isActive ? " ← active" : ""}</td>
-      <td>${balStr}</td>
-      <td>${allStr}</td>
-    `;
-    tbody.appendChild(tr);
-  });
+    return `
+      <label class="acct-row${isSelected ? " selected" : ""}" title="${r.address}">
+        <input type="radio" class="acct-radio-input" name="accountSelect" value="${r.address}"
+               ${isSelected ? "checked" : ""} onchange="selectAccount('${r.address}')">
+        <span class="acct-radio-visual"><span class="dot"></span></span>
+        <span class="acct-main">
+        <span class="acct-addr">${short(r.address)}</span>
+          <span class="acct-sub">Balance ${balStr}</span>
+        </span>
+        <span class="acct-allowance">
+          <span class="acct-allowance-label">Allowance</span>
+          <span class="acct-allowance-value">${allStr}</span>
+        </span>
+      </label>`;
+  }).join("");
 }
 
 function selectAccount(addr) {

@@ -16,7 +16,14 @@
 <script>
   fetch("../header.html")
     .then(r => r.text())
-    .then(html => { $("header-placeholder").outerHTML = html; initGlobal(); })
+    .then(html => {
+        $("header-placeholder").outerHTML = html;
+        // This page is read-only (no wallet-signed actions), so the shared
+        // Wallet panel doesn't apply here.
+        const walletPanel = $("walletPanel");
+        if (walletPanel) walletPanel.style.display = "none";
+        initGlobal();
+    })
     .catch(e => console.error("Failed to load header.html:", e));
 </script>
 
@@ -26,7 +33,7 @@
   wallet needed.
 </div>
 
-<div class="panel">
+<div class="panel settings-panel" id="lookbackPanel" style="display:none;">
   <h2>Lookback window</h2>
   <div class="hint">
     Trade and transfer history is read via eth_getLogs over the last N blocks (no indexer/API key
@@ -43,17 +50,15 @@
 <div class="panel">
   <h2>Last settlement <span class="muted" style="font-weight:400; font-size:12px;" id="lastSlotLabel"></span></h2>
   <div class="stat-row" id="lastSettlementStats"></div>
-  <table id="lastSettlementTable">
-    <thead><tr><th>Address</th><th>Role</th><th>Net amount</th></tr></thead>
-    <tbody></tbody>
-  </table>
+  <div class="hint">Green bars are what an account received in the last settlement, red bars are what it paid — sorted from received the most (left) to paid the most (right), each bar scaled relative to the largest amount involved.</div>
+  <div id="lastSettlementChart" class="settlement-chart"></div>
   <div id="lastSettlementStatus" class="muted" style="margin-top:8px; font-size:12px;"></div>
 </div>
 
 <div class="panel">
   <h2>Accounts overview</h2>
   <table id="accountsTable">
-    <thead><tr><th>Address</th><th>Type</th><th>Net worth</th><th>Change in last settlement</th><th>Net balance (24h)</th></tr></thead>
+    <thead><tr><th>Address</th><th>Type</th><th>Net worth</th><th>Consumption</th><th>Production</th><th>Change in last settlement</th></tr></thead>
     <tbody></tbody>
   </table>
   <div id="accountsStatus" class="muted" style="margin-top:8px; font-size:12px;"></div>
@@ -108,7 +113,7 @@ async function getBlockTimestamp(blockNumber) {
 // ─────────────────────────────────────────────────────────────
 
 async function refreshAll() {
-  if (!cfg.market || !cfg.stablecoin) return;
+  if (!cfg.market || !cfg.stablecoin || !cfg.oracle) return;
 
   const lookback = Math.max(1, parseInt($("lookbackBlocks").value, 10) || 10000);
   $("lookbackStatus").textContent = "Loading…";
@@ -118,6 +123,7 @@ async function refreshAll() {
 
   const marketR = new readWeb3.eth.Contract(MARKET_ABI, cfg.market);
   const stablecoinR = new readWeb3.eth.Contract(ERC20_ABI, cfg.stablecoin);
+  const oracleR = new readWeb3.eth.Contract(ORACLE_ABI, cfg.oracle);
 
   try {
     if (window._decimals === undefined) {
@@ -154,13 +160,6 @@ async function refreshAll() {
     renderLastSettlement(lastSlotStr, lastSettlementTrades, decimals, symbol);
     renderFlowTable(last24hTrades, decimals, symbol);
 
-    // 24h net balance from raw ERC-20 Transfer events (captures any balance
-    // movement, not just P2P settlements).
-    const transferEvents = await stablecoinR.getPastEvents("Transfer", { fromBlock, toBlock: "latest" });
-    const uniqueTransferBlocks = [...new Set(transferEvents.map(e => e.blockNumber))];
-    await Promise.all(uniqueTransferBlocks.map(bn => getBlockTimestamp(bn)));
-    const last24hTransfers = transferEvents.filter(e => blockTimestampCache[e.blockNumber] >= cutoffTs);
-
     const settlementNet = {};
     for (const e of lastSettlementTrades) {
       const { producer, consumer, amountPaid } = e.returnValues;
@@ -168,18 +167,14 @@ async function refreshAll() {
       settlementNet[consumer] = (settlementNet[consumer] || 0n) - BigInt(amountPaid);
     }
 
-    const balanceNet24h = {};
-    for (const e of last24hTransfers) {
-      const { from, to, value } = e.returnValues;
-      balanceNet24h[from] = (balanceNet24h[from] || 0n) - BigInt(value);
-      balanceNet24h[to] = (balanceNet24h[to] || 0n) + BigInt(value);
-    }
-
     const entries = [
       ...households.map(a => ({ addr: a, type: "Household" })),
-      ...producers.map(a => ({ addr: a, type: "Producer" }))
+      // The registered "producer" account is the grid owner itself — it has
+      // no meter of its own, so its consumption/production get derived from
+      // the households below rather than read from the oracle.
+      ...producers.map(a => ({ addr: a, type: "Grid owner", isGrid: true }))
     ];
-    await renderAccountsOverview(entries, stablecoinR, settlementNet, balanceNet24h, decimals, symbol);
+    await renderAccountsOverview(entries, stablecoinR, oracleR, settlementNet, decimals, symbol);
 
   } catch (e) {
     console.error(e);
@@ -196,8 +191,8 @@ async function refreshAll() {
 
 function renderLastSettlement(slotStr, trades, decimals, symbol) {
   $("lastSlotLabel").textContent = `— slot ${slotStr}`;
-  const tbody = document.querySelector("#lastSettlementTable tbody");
-  tbody.innerHTML = "";
+  const chart = $("lastSettlementChart");
+  chart.innerHTML = "";
 
   if (trades.length === 0) {
     $("lastSettlementStats").innerHTML = "";
@@ -221,21 +216,53 @@ function renderLastSettlement(slotStr, trades, decimals, symbol) {
     <div class="stat"><div class="label">Total paid</div><div class="value">${fmtToken(totalPaid, decimals)} ${symbol}</div></div>
   `;
 
+  // Sorted from received the most (left) to paid the most (right).
   const rows = Object.entries(net).sort((a, b) => (b[1] > a[1] ? 1 : -1));
-  for (const [addr, amount] of rows) {
-    const tr = document.createElement("tr");
-    const role = amount > 0n ? "Producer (received)" : "Consumer (paid)";
-    tr.innerHTML = `<td>${addrCell(addr)}</td><td>${role}</td><td>${fmtSigned(amount, decimals, symbol)}</td>`;
-    tbody.appendChild(tr);
-  }
+  renderSettlementChart(rows, decimals, symbol);
   $("lastSettlementStatus").innerHTML = `<span class="ok">${rows.length} account(s) involved in slot ${slotStr}.</span>`;
+}
+
+const SETTLE_BAR_MAX_PX = 90;
+
+function renderSettlementChart(rows, decimals, symbol) {
+  const chart = $("lastSettlementChart");
+
+  // Stretch every bar relative to the single largest amount involved (on
+  // either side), so that account ends up full-height and everyone else is
+  // sized dynamically against it.
+  const maxAbs = rows.reduce((m, [, v]) => {
+    const av = v < 0n ? -v : v;
+    return av > m ? av : m;
+  }, 0n);
+
+  chart.innerHTML = rows.map(([addr, amount]) => {
+    const isPos = amount >= 0n;
+    const av = isPos ? amount : -amount;
+    const pct = maxAbs > 0n ? Number((av * 1000n) / maxAbs) / 10 : 0; // 0..100
+    const px = pct > 0 ? Math.max(2, (pct / 100) * SETTLE_BAR_MAX_PX) : 0;
+    const valueTxt = `${isPos ? "+" : "-"}${fmtToken(av, decimals)} ${symbol}`;
+
+    return `
+      <div class="settle-col" title="${addr}">
+        <div class="settle-value pos">${isPos ? valueTxt : ""}</div>
+        <div class="settle-top-half">
+          <div class="settle-bar settle-bar-pos" style="height:${isPos ? px : 0}px"></div>
+        </div>
+        <div class="settle-zero-line"></div>
+        <div class="settle-bottom-half">
+          <div class="settle-bar settle-bar-neg" style="height:${isPos ? 0 : px}px"></div>
+        </div>
+        <div class="settle-value neg">${isPos ? "" : valueTxt}</div>
+        <div class="settle-addr" onclick="copyAddress('${addr}', this)">${short(addr)}</div>
+      </div>`;
+  }).join("");
 }
 
 // ─────────────────────────────────────────────────────────────
 //  Accounts overview
 // ─────────────────────────────────────────────────────────────
 
-async function renderAccountsOverview(entries, stablecoinR, settlementNet, balanceNet24h, decimals, symbol) {
+async function renderAccountsOverview(entries, stablecoinR, oracleR, settlementNet, decimals, symbol) {
   const tbody = document.querySelector("#accountsTable tbody");
   tbody.innerHTML = "";
 
@@ -245,25 +272,58 @@ async function renderAccountsOverview(entries, stablecoinR, settlementNet, balan
   }
 
   const rows = await Promise.all(entries.map(async (e) => {
-    let balance = null;
+    let balance = null, consumptionWh = null, productionWh = null;
     try { balance = await stablecoinR.methods.balanceOf(e.addr).call(); } catch (err) {}
+    if (!e.isGrid) {
+      try {
+        const reading = await oracleR.methods.getLatestMeterReading(e.addr).call();
+        consumptionWh = reading.consumptionWh;
+        productionWh = reading.productionWh;
+      } catch (err) {}
+    }
     return {
       ...e,
       balance,
-      settlementChange: settlementNet[e.addr] || 0n,
-      change24h: balanceNet24h[e.addr] || 0n
+      consumptionWh,
+      productionWh,
+      settlementChange: settlementNet[e.addr] || 0n
     };
   }));
+
+  // The grid owner has no meter of its own. Derive its consumption/production
+  // as the residual that balances everyone else: whatever the community
+  // produced but didn't consume is exported to the grid (grid "consumes" it),
+  // and whatever it consumed but didn't produce locally is imported from the
+  // grid (grid "produces"/supplies it).
+  const gridRows = rows.filter(r => r.isGrid);
+  if (gridRows.length > 0) {
+    let totalConsumption = 0n, totalProduction = 0n;
+    for (const r of rows) {
+      if (r.isGrid) continue;
+      if (r.consumptionWh !== null) totalConsumption += BigInt(r.consumptionWh);
+      if (r.productionWh !== null) totalProduction += BigInt(r.productionWh);
+    }
+    const communitySurplus = totalProduction - totalConsumption;
+    const gridConsumption = (communitySurplus > 0n ? communitySurplus : 0n).toString();
+    const gridProduction = (communitySurplus < 0n ? -communitySurplus : 0n).toString();
+    for (const r of gridRows) {
+      r.consumptionWh = gridConsumption;
+      r.productionWh = gridProduction;
+    }
+  }
 
   for (const r of rows) {
     const tr = document.createElement("tr");
     const balanceTxt = r.balance !== null ? fmtToken(BigInt(r.balance), decimals) + " " + symbol : "?";
+    const consTxt = r.consumptionWh !== null ? fmtToken(BigInt(r.consumptionWh), 3) + " kWh" : "?";
+    const prodTxt = r.productionWh !== null ? fmtToken(BigInt(r.productionWh), 3) + " kWh" : "?";
     tr.innerHTML = `
       <td>${addrCell(r.addr)}</td>
       <td>${r.type}</td>
       <td>${balanceTxt}</td>
+      <td>${consTxt}</td>
+      <td>${prodTxt}</td>
       <td>${fmtSigned(r.settlementChange, decimals, symbol)}</td>
-      <td>${fmtSigned(r.change24h, decimals, symbol)}</td>
     `;
     tbody.appendChild(tr);
   }

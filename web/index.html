@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Energy Trading</title>
+<script src="https://cdn.jsdelivr.net/npm/web3@1.10.4/dist/web3.min.js"></script>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, Segoe UI, Roboto, sans-serif;
+    background: #0f1115;
+    color: #e6e6e6;
+    margin: 0;
+    padding: 24px;
+  }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  h2 { font-size: 16px; margin: 0 0 6px; color: #9fd3ff; }
+  .sub { color: #888; font-size: 13px; margin-bottom: 20px; max-width: 640px; }
+  .panel {
+    background: #171a21;
+    border: 1px solid #2a2e38;
+    border-radius: 8px;
+    padding: 16px 18px;
+    margin-bottom: 16px;
+  }
+  .config-grid {
+    display: grid;
+    grid-template-columns: 160px 1fr 24px;
+    gap: 8px 12px;
+    align-items: center;
+  }
+  .config-grid label { font-size: 12px; color: #aaa; }
+  input[type=text] {
+    width: 100%;
+    background: #0f1115;
+    border: 1px solid #333944;
+    color: #e6e6e6;
+    border-radius: 4px;
+    padding: 6px 8px;
+    font-family: ui-monospace, Consolas, monospace;
+    font-size: 12px;
+  }
+  .validity { font-size: 13px; text-align: center; }
+  .ok { color: #4ade80; }
+  .bad { color: #f87171; }
+  .muted { color: #666; }
+  .hint { color: #888; font-size: 12px; margin-top: 8px; }
+  button {
+    background: #2b6cb0;
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    padding: 8px 16px;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  button:hover { background: #3a7fca; }
+  button.secondary { background: #333944; }
+  button.secondary:hover { background: #444b58; }
+  button.copy.done { background: #14351f; color: #4ade80; }
+
+  .card-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+  @media (max-width: 720px) { .card-grid { grid-template-columns: 1fr; } }
+  .card {
+    background: #171a21;
+    border: 1px solid #2a2e38;
+    border-radius: 8px;
+    padding: 18px 20px;
+    display: flex;
+    flex-direction: column;
+    transition: border-color .15s ease;
+  }
+  .card:hover { border-color: #3a7fca; }
+  .card .desc { color: #aaa; font-size: 13px; line-height: 1.5; flex: 1; margin-bottom: 14px; }
+  .card .actions { display: flex; gap: 8px; }
+  .card .actions a {
+    background: #2b6cb0;
+    color: #fff;
+    text-decoration: none;
+    border-radius: 4px;
+    padding: 8px 16px;
+    font-size: 13px;
+  }
+  .card .actions a:hover { background: #3a7fca; }
+</style>
+</head>
+<body>
+
+<h1>Energy Trading</h1>
+<div class="sub">
+  Peer-to-peer energy trading — pick a page below. Each one also works fully on its own if you
+  arrive without a deployment set, so the fields below are just a shortcut to pre-fill the links.
+</div>
+
+<div class="panel">
+  <h2>Deployment</h2>
+  <div class="hint" style="margin-top:0; margin-bottom:10px;">
+    Optional — fill these in once and every link below carries them as <code>?oracle=&market=</code>.
+    Leave blank and you'll be asked for them on whichever page you open instead.
+  </div>
+  <div class="config-grid">
+    <label>OracleStorage</label>
+    <input type="text" id="oracleInput" placeholder="0x...">
+    <span class="validity" id="oracleValidity"></span>
+
+    <label>P2PEnergyMarket</label>
+    <input type="text" id="marketInput" placeholder="0x...">
+    <span class="validity" id="marketValidity"></span>
+  </div>
+</div>
+
+<div class="card-grid">
+
+  <div class="card">
+    <h2>Admin</h2>
+    <div class="desc">
+      Register households and producers, grant Oracle write access, manage battery-controlled
+      wallets, and see net worth &amp; registration status in one table.
+    </div>
+    <div class="actions">
+      <a href="#" id="linkAdmin">Open →</a>
+      <button class="secondary copy" onclick="copyLink('linkAdmin', this)">Copy link</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Self-Service</h2>
+    <div class="desc">
+      Grant the P2PEnergyMarket contract a stablecoin allowance so settleSlot() can transfer
+      payments on your behalf.
+    </div>
+    <div class="actions">
+      <a href="#" id="linkSelfservice">Open →</a>
+      <button class="secondary copy" onclick="copyLink('linkSelfservice', this)">Copy link</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Transactions</h2>
+    <div class="desc">
+      Last settlement, who got paid what, per-account net worth and 24h balance change, and
+      energy exchanged between accounts.
+    </div>
+    <div class="actions">
+      <a href="#" id="linkTransactions">Open →</a>
+      <button class="secondary copy" onclick="copyLink('linkTransactions', this)">Copy link</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Overview</h2>
+    <div class="desc">
+      Read-only chain viewer: households, consumption/production and weather charts, battery
+      cycles, incentive scores, and raw market/Oracle contract details.
+    </div>
+    <div class="actions">
+      <a href="#" id="linkOverview">Open →</a>
+      <button class="secondary copy" onclick="copyLink('linkOverview', this)">Copy link</button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const PAGES = {
+  linkAdmin: "admin/index.html",
+  linkSelfservice: "selfservice/index.html",
+  linkTransactions: "transactions/index.html",
+  linkOverview: "overview/index.html"
+};
+
+function readParamFromUrl(name) {
+  try {
+    const v = new URLSearchParams(window.location.search).get(name);
+    return v ? v.trim() : null;
+  } catch (e) { return null; }
+}
+
+function syncParamsToUrl(params) {
+  try {
+    const url = new URL(window.location.href);
+    for (const [key, value] of Object.entries(params)) {
+      if (value) url.searchParams.set(key, value);
+      else url.searchParams.delete(key);
+    }
+    history.replaceState(null, "", url.toString());
+  } catch (e) {
+    console.warn("syncParamsToUrl failed:", e.message);
+  }
+}
+
+function checkValidity(inputId, validityId) {
+  const raw = $(inputId).value.trim();
+  const el = $(validityId);
+  if (raw === "") { el.innerHTML = ""; return; }
+  el.innerHTML = Web3.utils.isAddress(raw)
+    ? '<span class="ok">✓</span>'
+    : '<span class="bad">✗</span>';
+}
+
+function buildQuery() {
+  const oracle = $("oracleInput").value.trim();
+  const market = $("marketInput").value.trim();
+  const params = new URLSearchParams();
+  if (oracle) params.set("oracle", oracle);
+  if (market) params.set("market", market);
+  const qs = params.toString();
+  return qs ? "?" + qs : "";
+}
+
+function rebuildLinks() {
+  checkValidity("oracleInput", "oracleValidity");
+  checkValidity("marketInput", "marketValidity");
+  const qs = buildQuery();
+  for (const [id, path] of Object.entries(PAGES)) {
+    $(id).href = path + qs;
+  }
+  syncParamsToUrl({ oracle: $("oracleInput").value.trim(), market: $("marketInput").value.trim() });
+}
+
+function copyLink(linkId, btn) {
+  const href = $(linkId).href;
+  navigator.clipboard.writeText(href).then(() => {
+    const original = btn.textContent;
+    btn.textContent = "Copied!";
+    btn.classList.add("done");
+    setTimeout(() => { btn.textContent = original; btn.classList.remove("done"); }, 1200);
+  }).catch(() => { alert(href); });
+}
+
+function init() {
+  $("oracleInput").value = readParamFromUrl("oracle") || "";
+  $("marketInput").value = readParamFromUrl("market") || "";
+  $("oracleInput").addEventListener("input", rebuildLinks);
+  $("marketInput").addEventListener("input", rebuildLinks);
+  rebuildLinks();
+}
+
+init();
+</script>
+
+</body>
+</html>

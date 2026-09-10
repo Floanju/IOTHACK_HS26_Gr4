@@ -101,27 +101,46 @@ class OracleWriter:
     # ─────────────────────────────────────────────────────────────
 
     def _send_tx(self, contract_function, max_retries: int = 3):
-        """Baut, signiert, sendet eine Transaktion - mit Retry und Nonce-Management."""
+        """Baut, signiert, sendet eine Transaktion - mit Retry, Nonce-Management und Status-Check."""
+        nonce = self.w3.eth.get_transaction_count(self.account.address, "pending")
+        priority_fee_gwei = 2
+        last_exc = None
+
         for attempt in range(max_retries):
             try:
-                nonce = self.w3.eth.get_transaction_count(self.account.address, "pending")
-                tx = contract_function.build_transaction({
+                base_tx = {
                     "from": self.account.address,
-                    "nonce": nonce,
+                    "nonce": nonce,  # fixed across retries - we're replacing, not queuing
                     "chainId": self.chain_id,
-                    "gas": 1_500_000,
                     "maxFeePerGas": self.w3.to_wei("30", "gwei"),
-                    "maxPriorityFeePerGas": self.w3.to_wei("2", "gwei"),
-                })
+                    "maxPriorityFeePerGas": self.w3.to_wei(str(priority_fee_gwei), "gwei"),
+                }
+                try:
+                    estimated = contract_function.estimate_gas(base_tx)
+                    gas_limit = int(estimated * 1.3)
+                except Exception as est_err:
+                    raise RuntimeError(f"Simulation failed, not sending: {est_err}") from est_err
+
+                tx = contract_function.build_transaction({**base_tx, "gas": gas_limit})
                 signed = self.w3.eth.account.sign_transaction(tx, ORACLE_PRIVATE_KEY)
                 tx_hash = self.w3.eth.send_raw_transaction(signed.raw_transaction)
-                receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)
-                return receipt
-            except Exception as e:
-                print(f"  TX fehlgeschlagen (Versuch {attempt+1}): {e}")
-                time.sleep(5)
-        raise RuntimeError("Max retries erreicht")
 
+                receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)
+
+                if receipt.status != 1:
+                    raise RuntimeError(f"Tx {tx_hash.hex()} mined but reverted (status={receipt.status})")
+                return receipt
+
+            except Exception as e:
+                last_exc = e
+                print(f"  TX fehlgeschlagen (Versuch {attempt+1}): {e}")
+                # Same nonce next time, but bump priority fee so the replacement
+                # is valid (nodes require >= a % bump over the pending tx's fee)
+                # and actually propagates instead of being silently dropped.
+                priority_fee_gwei = int(priority_fee_gwei * 1.5) + 1
+                time.sleep(5)
+
+        raise RuntimeError(f"Max retries erreicht: {last_exc}")
     # ─────────────────────────────────────────────────────────────
 
     def register_households_if_needed(self):
@@ -214,7 +233,7 @@ class OracleWriter:
         #self.register_households_if_needed()
         #self.register_p2p_if_needed()
         #self.register_gridprovider_if_needed()  # <--- NEW
-        #self._send_tx(self.oracle.functions.authorizeOracle("0x88CFeA9Cac2DabF1da5Af8c339e652b0e129Bd2E"))
+        #self._send_tx(self.oracle.functions.authorizeOracle("0xd869207c0Eea60A97E1d5187adeb19433a958687"))
         try:
             while True:
                 start = time.time()

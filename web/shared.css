@@ -558,3 +558,90 @@
   .settle-addr:hover {
       text-decoration: underline;
   }
+
+  /* Battery state badges */
+  .batt-state {
+      font-size: 12px;
+      font-weight: 600;
+  }
+
+  .batt-state.charging {
+      color: #4ade80;
+  }
+
+  .batt-state.idle {
+      color: #9aa0ab;
+  }
+
+  .batt-state.discharging {
+      color: #f87171;
+  }
+
+  .batt-state.unknown {
+      color: #666;
+      font-weight: 400;
+  }
+
+  /* Price-factor / multiplier badge */
+  .pricefactor.good {
+      color: #4ade80;
+  }
+
+  .pricefactor.bad {
+      color: #f87171;
+  }
+
+  .pricefactor.neutral {
+      color: #888;
+  }
+
+  /* Per-account chart cards (consumption/production, battery history) */
+  .acct-charts {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+  }
+
+  .acct-chart-card {
+      background: #171a21;
+      border: 1px solid #2a2e38;
+      border-radius: 8px;
+      padding: 14px 16px;
+  }
+
+  .acct-chart-card h3 {
+      font-size: 13px;
+      margin: 0 0 2px;
+      color: #9fd3ff;
+      font-family: ui-monospace, Consolas, monospace;
+      font-weight: 600;
+  }
+
+  .acct-chart-card .chart-meta {
+      font-size: 11px;
+      color: #888;
+      margin-bottom: 10px;
+  }
+
+  .chart-scroll {
+      overflow-x: auto;
+      overflow-y: hidden;
+  }
+
+  .chart-legend {
+      display: flex;
+      gap: 16px;
+      font-size: 11px;
+      color: #aaa;
+      margin-bottom: 12px;
+      flex-wrap: wrap;
+  }
+
+  .chart-legend .swatch {
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      border-radius: 2px;
+      margin-right: 5px;
+      vertical-align: middle;
+  }

@@ -68,6 +68,7 @@ class OracleWriter:
             self.config = json.load(f)
 
         bc = self.config["blockchain"]
+        self.bc = bc
         self.w3 = Web3(Web3.HTTPProvider(bc["rpc_url"]))
         # Manche Sepolia-RPCs liefern PoA-extra-data
         self.w3.middleware_onion.inject(ExtraDataToPOAMiddleware, layer=0)
@@ -95,8 +96,6 @@ class OracleWriter:
         self.simulator.start_real_time -= 24 * 60 * 3
         print(f"DEBUG: Simulator start time: {self.simulator.start_real_time}")
         self.chain_id = bc["chain_id"]
-        #self._send_tx(self.p2p_market.functions.setBatteryManager("0x3dc02ba0c07411890502bb132BAA28d0a05eE8B1"))
-        self._send_tx(self.oracle.functions.authorizeOracle("0xd869207c0Eea60A97E1d5187adeb19433a958687"))
 
 
     # ─────────────────────────────────────────────────────────────
@@ -136,12 +135,34 @@ class OracleWriter:
             print(f"Registriere Haushalt {h['id']} ({addr}) ...")
             self._send_tx(self.oracle.functions.registerHousehold(addr))
 
+    def register_gridprovider_if_needed(self):
+        """Registriert den Gridprovider im P2P Market und im Oracle."""
+        grid_addr = Web3.to_checksum_address(self.config["grid_provider"]["address"])
+        
+        # 1. Oracle Registration (Required for updateMeter to succeed)
+        registered_oracle = self.oracle.functions.isHouseholdRegistered(grid_addr).call()
+        if not registered_oracle:
+            print(f"Registriere Grid im Oracle ({grid_addr}) ...")
+            self._send_tx(self.oracle.functions.registerHousehold(grid_addr))
+            
+        # 2. P2P Market Producer Registration
+        registered_p2p = self.p2p_market.functions.isRegisteredProducer(grid_addr).call()
+        if not registered_p2p:
+            print(f"Registriere Grid als Producer im P2P ({grid_addr}) ...")
+            self._send_tx(self.p2p_market.functions.registerProducer(grid_addr))
+
     def register_p2p_if_needed(self):
         """Stellt sicher, dass alle konfigurierten Haushalte im P2P Market registriert sind."""
         for h in self.config["households"]:
             addr = Web3.to_checksum_address(h["address"])
-            print(f"Registriere Haushalt {h['id']} ({addr}) ...")
-            self._send_tx(self.p2p_market.functions.registerHousehold(addr))
+            
+            # Check isRegistered instead of isRegisteredProducer
+            registered_p2p = self.p2p_market.functions.isRegistered(addr).call()
+            
+            if not registered_p2p:
+                print(f"Registriere Haushalt {h['id']} ({addr}) im P2P-Market...")
+                # Call registerHousehold instead of registerProducer
+                self._send_tx(self.p2p_market.functions.registerHousehold(addr))
 
     # ─────────────────────────────────────────────────────────────
 
@@ -189,8 +210,11 @@ class OracleWriter:
     def run(self, slot_seconds: int = 60):
         """Hauptschleife: pushe einen Slot pro Minute."""
         print("\n=== Oracle Writer gestartet ===\n")
-        self.register_households_if_needed()
+        #self._send_tx(self.p2p_market.functions.setBatteryManager(self.bc["battery_manager_address"]))
+        #self.register_households_if_needed()
         #self.register_p2p_if_needed()
+        #self.register_gridprovider_if_needed()  # <--- NEW
+        #self._send_tx(self.oracle.functions.authorizeOracle("0x88CFeA9Cac2DabF1da5Af8c339e652b0e129Bd2E"))
         try:
             while True:
                 start = time.time()

@@ -143,6 +143,42 @@ class OracleWriter:
             print(f"Registriere Haushalt {h['id']} ({addr}) ...")
             self._send_tx(self.p2p_market.functions.registerHousehold(addr))
 
+    def register_grid_operator_if_needed(self):
+        """Registriert EKR (Netzbetreiber) als Producer im P2P Market - EKR ist kein
+        Haushalt und wird daher separat von register_households_if_needed() behandelt."""
+        ekr = self.config.get("grid_operator")
+        if not ekr:
+            return
+        addr = Web3.to_checksum_address(ekr["address"])
+        registered = self.p2p_market.functions.isRegisteredProducer(addr).call()
+        if registered:
+            print(f"Netzbetreiber {ekr['id']} ({addr}) bereits als Producer registriert.")
+            return
+        print(f"Registriere Netzbetreiber {ekr['id']} ({addr}) als Producer ...")
+        self._send_tx(self.p2p_market.functions.registerProducer(addr))
+
+    def sync_grid_operator_prices(self):
+        """Schreibt EKRs Ankaufs-/Verkaufspreis in den P2P Market, falls abweichend.
+
+        buy_price_per_kwh:  Preis, den EKR fuer von Haushalten gekaufte
+                             Ueberschuss-Energie zahlt (householdToProducerPrice).
+        sell_price_per_kwh: Preis, den EKR fuer an Haushalte verkaufte Energie
+                             verlangt (producerToHouseholdPrice).
+        """
+        ekr = self.config.get("grid_operator")
+        if not ekr:
+            return
+        buy_price = ekr["buy_price_per_kwh"]
+        sell_price = ekr["sell_price_per_kwh"]
+
+        if self.p2p_market.functions.householdToProducerPrice().call() != buy_price:
+            print(f"Setze EKR-Ankaufspreis (Haushalt -> EKR) auf {buy_price} ...")
+            self._send_tx(self.p2p_market.functions.setHouseholdToProducerPrice(buy_price))
+
+        if self.p2p_market.functions.producerToHouseholdPrice().call() != sell_price:
+            print(f"Setze EKR-Verkaufspreis (EKR -> Haushalt) auf {sell_price} ...")
+            self._send_tx(self.p2p_market.functions.setProducerToHouseholdPrice(sell_price))
+
     # ─────────────────────────────────────────────────────────────
 
     def push_slot(self):
@@ -191,6 +227,8 @@ class OracleWriter:
         print("\n=== Oracle Writer gestartet ===\n")
         self.register_households_if_needed()
         #self.register_p2p_if_needed()
+        self.register_grid_operator_if_needed()
+        self.sync_grid_operator_prices()
         try:
             while True:
                 start = time.time()

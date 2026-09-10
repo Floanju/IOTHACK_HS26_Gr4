@@ -42,17 +42,18 @@
       "battery_capacity_kwh": 0.0,
       "battery_max_rate_kwh": 0.0,
       "base_consumption_kwh_per_hour": 1.0
-    },
-    {
-      "id": "ekr",
-      "address": "0xD35B3D1B1B514971e308cc4BE8e506CaF2a4F100",
-      "type": "producer",
-      "pv_peak_kwp": 100,
-      "battery_capacity_kwh": 0.0,
-      "battery_max_rate_kwh": 0.0,
-      "base_consumption_kwh_per_hour": 0
     }
   ],
+
+  "grid_operator": {
+    "comment": "EKR ist kein Haushalt, sondern der Netzbetreiber (P2PEnergyMarket-Producer). Wird nicht simuliert (kein Meter/PV/Batterie), sondern nur mit eigenen Ankaufs-/Verkaufspreisen im P2P-Market registriert.",
+    "id": "ekr",
+    "address": "0xD35B3D1B1B514971e308cc4BE8e506CaF2a4F100",
+    "type": "grid_operator",
+    "comment_price": "Preise in Token-Einheiten pro kWh, 6 Decimals (gleiche Skalierung wie P2PEnergyMarket.energyPricePerKwh).",
+    "buy_price_per_kwh": 80000,
+    "sell_price_per_kwh": 120000
+  },
 
   "weather": {
     "comment": "Tagesgang wird simuliert: Sonnenaufgang bis -untergang",

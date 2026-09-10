@@ -4,6 +4,14 @@ ai_forecast.py
 STARTER-CODE - Teams ersetzen das Modell durch eigene Wahl.
 Nur relevant für Phase 3 (optional).
 
+Granularitaet: "stuendlich" lt. Challenge-Vorgabe = alle 4 Minuten Realzeit
+(1 Sim-Stunde = 4 echte Minuten). Ein einzelner Oracle-Slot ist mit 15
+Sim-Minuten feiner als das - der Forecast-Loop erzwingt daher eine
+Mindestzykluszeit von 4 Minuten (MIN_CYCLE_SECONDS), reagiert aber weiterhin
+auf den naechsten TATSAECHLICH geschriebenen Slot statt einen zu erraten
+(sonst passen Forecast- und Actual-Slot bei unregelmaessig schreibenden
+Oracle-Writern nie zusammen - siehe Kommentare im Forecast-Loop).
+
 Zwei getrennte Prognosen pro Haushalt und Slot:
   - PV-Produktion: physikalisch via PVPhysicalModel (pvlib), braucht KEINE
     Trainingsdaten - nutzt nur pv_peak_kwp + aktuelles Oracle-Wetter.
@@ -308,9 +316,17 @@ def main():
 
     print()
 
+    # Prognosegranularitaet lt. Challenge: "stuendlich" = alle 4 Minuten
+    # Realzeit (siehe README/PDF, 1 Sim-Stunde = 4 echte Minuten). Ein
+    # einzelner Oracle-Slot ist mit 15 Sim-Minuten feiner als das - deshalb
+    # hier eine Mindestzykluszeit erzwingen, statt bei jedem einzelnen Slot
+    # zu prognostizieren.
+    MIN_CYCLE_SECONDS = 4 * 60
+
     # Forecast-Loop
     while True:
         try:
+            cycle_start = time.time()
             slot_before = oracle.functions.getCurrentSlot().call()
 
             # NICHT "current_slot + 1" vorab raten: die Oracle-Writer schreiben
@@ -414,6 +430,16 @@ def main():
                     w3, incentive, account,
                     h_cfg["address"], target_slot, actual_cons, actual_prod
                 )
+
+            # Mindestabstand von 4 Minuten zwischen zwei Prognose-Zyklen
+            # einhalten (siehe MIN_CYCLE_SECONDS oben) - falls das reaktive
+            # Warten auf den naechsten Slot schneller fertig war.
+            elapsed = time.time() - cycle_start
+            remaining = MIN_CYCLE_SECONDS - elapsed
+            if remaining > 0:
+                print(f"  Zyklus war nach {elapsed:.0f}s fertig, warte weitere "
+                      f"{remaining:.0f}s bis zum naechsten 4-Minuten-Zyklus ...")
+                time.sleep(remaining)
 
         except Exception as e:
             print(f"  Fehler: {e}")

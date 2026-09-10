@@ -1,0 +1,51 @@
+<div id="shared-header-ui">
+  <div class="topnav">
+    <a href="#" id="navHome">Home</a>
+    <a href="#" id="navAdmin">Admin</a>
+    <a href="#" id="navSelfservice">Self-Service</a>
+    <a href="#" id="navTransactions">Transactions</a>
+    <a href="#" id="navOverview">Overview</a>
+  </div>
+
+  <div id="missingParamsBanner" class="banner warn" style="display:none;">
+    Missing <code>oracle</code> and/or <code>market</code> URL parameter. Enter both below and
+    click "Load" — there are no built-in defaults, this page only works with an explicit deployment.
+  </div>
+
+  <div class="panel">
+    <h2>Deployment</h2>
+    <div class="config-grid">
+      <label>OracleStorage</label>
+      <input type="text" id="cfgOracle" placeholder="0x...">
+
+      <label>P2PEnergyMarket</label>
+      <input type="text" id="cfgMarket" placeholder="0x...">
+
+      <label>Stablecoin</label>
+      <input type="text" id="cfgStablecoin" readonly placeholder="(auto, via market.stablecoin())">
+
+      <label>BatteryManager</label>
+      <input type="text" id="cfgBattery" readonly placeholder="(auto, via market.batteryManager())">
+      
+      <!-- New Incentive Controller appended here -->
+      <label>IncentiveController</label>
+      <input type="text" id="cfgIncentive" readonly placeholder="(auto, via market.incentiveController())">
+    </div>
+    <button onclick="loadConfig()">Load</button>
+    <div id="cfgStatus" class="muted" style="margin-top:6px; font-size:12px;"></div>
+  </div>
+
+  <div class="panel">
+    <h2>Wallet</h2>
+    <div class="hint">
+      Connect as many accounts as you need in one go (MetaMask → connected sites → edit accounts)
+      so each write action below can find the right signer for the required role by itself.
+    </div>
+    <div id="walletBar">
+      <button onclick="connectWallet()">Connect MetaMask</button>
+      <span id="walletAddr" class="muted">Not connected</span>
+    </div>
+    <div id="rolesTableWrap" style="margin-top:10px; overflow-x:auto;"></div>
+    <div id="walletStatus" class="muted" style="margin-top:6px; font-size:12px;"></div>
+  </div>
+</div>

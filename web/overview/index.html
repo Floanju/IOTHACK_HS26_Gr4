@@ -4,53 +4,31 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Energy Trading — Overview</title>
+
+<link rel="stylesheet" href="../shared.css">
+
 <script src="https://cdn.jsdelivr.net/npm/web3@1.10.4/dist/web3.min.js"></script>
+<script src="../shared.js"></script>
+
+<!--
+  Everything below is specific to this page's own layout (subnav, charts,
+  battery/incentive badges) — the chrome shared with every other page (nav,
+  panels, buttons, tables, kv, banners, form inputs) lives in ../shared.css.
+-->
 <style>
-  * { box-sizing: border-box; }
-  body {
-    font-family: -apple-system, Segoe UI, Roboto, sans-serif;
-    background: #0f1115;
-    color: #e6e6e6;
-    margin: 0;
-    padding: 24px;
-  }
-  h1 { font-size: 20px; margin: 0 0 4px; }
-  h2 { font-size: 15px; margin: 0 0 10px; color: #9fd3ff; }
-  .sub { color: #888; font-size: 13px; margin-bottom: 16px; }
-  .topnav { display: flex; gap: 4px; margin-bottom: 18px; border-bottom: 1px solid #22262f; padding-bottom: 12px; }
-  .topnav a {
-    color: #9fd3ff; text-decoration: none; font-size: 13px;
-    padding: 6px 12px; border-radius: 6px; background: #171a21; border: 1px solid #2a2e38;
-  }
-  .topnav a.active { background: #2b6cb0; color: #fff; border-color: #2b6cb0; }
-  .topnav a:hover:not(.active) { background: #1c2028; }
   .subnav { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 16px; }
   .subnav a {
     color: #9fd3ff; text-decoration: none; font-size: 12px;
     padding: 5px 12px; border-radius: 999px; background: #171a21; border: 1px solid #2a2e38;
   }
   .subnav a:hover { border-color: #3a7fca; }
-  .panel {
-    background: #171a21;
-    border: 1px solid #2a2e38;
-    border-radius: 8px;
-    padding: 16px 18px;
-    margin-bottom: 16px;
-  }
   section[id], details[id] { scroll-margin-top: 16px; }
   details.panel > summary { font-size: 15px; color: #9fd3ff; cursor: pointer; list-style: none; }
   details.panel > summary::-webkit-details-marker { display: none; }
   details.panel > summary:before { content: "▸ "; color: #666; }
   details.panel[open] > summary:before { content: "▾ "; }
   details.panel[open] > summary { margin-bottom: 10px; }
-  .config-grid {
-    display: grid;
-    grid-template-columns: 160px 1fr;
-    gap: 8px 12px;
-    align-items: center;
-  }
-  .config-grid label { font-size: 12px; color: #aaa; }
-  input[type=text], input[type=datetime-local], textarea {
+  input[type=datetime-local], textarea {
     width: 100%;
     background: #0f1115;
     border: 1px solid #333944;
@@ -62,44 +40,9 @@
     color-scheme: dark;
   }
   textarea { min-height: 80px; resize: vertical; }
-  input[readonly] { color: #999; background: #14161b; }
-  button {
-    background: #2b6cb0;
-    color: #fff;
-    border: none;
-    border-radius: 4px;
-    padding: 8px 16px;
-    font-size: 13px;
-    cursor: pointer;
-    margin-top: 10px;
-    margin-right: 8px;
-  }
-  button:hover { background: #3a7fca; }
-  button:disabled { background: #333944; cursor: not-allowed; }
-  button.secondary { background: #333944; }
-  button.secondary:hover { background: #444b58; }
-  button.copy { background: #262b35; padding: 2px 6px; font-size: 11px; margin: 0 0 0 6px; border: 1px solid #333944; }
-  button.copy:hover { background: #333944; }
-  button.copy.done { background: #14351f; color: #4ade80; border-color: #1c4a2c; }
-  table { width: 100%; border-collapse: collapse; font-size: 13px; }
-  th, td {
-    text-align: left;
-    padding: 6px 8px;
-    border-bottom: 1px solid #22262f;
-    white-space: nowrap;
-  }
-  th { color: #9fd3ff; font-weight: 600; }
-  .addr-cell { display: flex; align-items: center; }
-  .kv { display: grid; grid-template-columns: 220px 1fr; gap: 4px 12px; font-size: 13px; }
-  .kv div.k { color: #9fd3ff; }
-  .kv div.v { font-family: ui-monospace, Consolas, monospace; word-break: break-all; display: flex; align-items: center; }
-  .ok { color: #4ade80; }
-  .bad { color: #f87171; }
-  .muted { color: #666; }
-  .warn { color: #fbbf24; }
-  .hint { color: #888; font-size: 12px; margin-bottom: 8px; }
-  .banner { padding: 10px 14px; border-radius: 6px; font-size: 13px; margin-bottom: 16px; }
-  .banner.warn { background: #2a2110; border: 1px solid #4a3b14; color: #fbbf24; }
+  html { scroll-behavior: smooth; }
+  .market-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 900px) { .market-grid { grid-template-columns: 1fr; } }
 
   .date-range {
     display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
@@ -129,7 +72,6 @@
   .badge.charge { background: rgba(74, 222, 128, 0.15); color: #4ade80; }
   .badge.discharge { background: rgba(251, 191, 36, 0.15); color: #fbbf24; }
   .badge.idle { background: rgba(154, 160, 171, 0.15); color: #9aa0ab; }
-  .badge.household { background: rgba(159, 211, 255, 0.15); color: #9fd3ff; }
 
   .chart-card { margin-bottom: 12px; }
   .chart-card summary { font-size: 13px; color: #e6e6e6; cursor: pointer; list-style: none; }
@@ -155,21 +97,17 @@
   .chart-tooltip .tt-time { color: #888; margin-bottom: 3px; }
   .chart-tooltip .tt-row { display: flex; align-items: center; gap: 6px; }
   .chart-tooltip .tt-row .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto; }
-
-  html { scroll-behavior: smooth; }
-  .market-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-  @media (max-width: 900px) { .market-grid { grid-template-columns: 1fr; } }
 </style>
 </head>
 <body>
 
-<div class="topnav">
-  <a href="#" id="navHome">Home</a>
-  <a href="#" id="navAdmin">Admin</a>
-  <a href="#" id="navSelfservice">Self-Service</a>
-  <a href="#" id="navTransactions">Transactions</a>
-  <a href="#" id="navOverview" class="active">Overview</a>
-</div>
+<div id="header-placeholder"></div>
+<script>
+  fetch("../header.html")
+    .then(r => r.text())
+    .then(html => { $("header-placeholder").outerHTML = html; init(); })
+    .catch(e => console.error("Failed to load header.html:", e));
+</script>
 
 <h1>Energy Trading — Overview</h1>
 <div class="sub">
@@ -177,40 +115,18 @@
   no wallet needed. <span id="statusInline" class="muted"></span>
 </div>
 
-<div id="missingParamsBanner" class="banner warn" style="display:none;">
-  Missing <code>oracle</code> and/or <code>market</code> URL parameter. Enter both below and
-  click "Load" — there are no built-in defaults, this page only works with an explicit deployment.
-</div>
-
-<div class="panel">
-  <h2>Deployment</h2>
-  <div class="config-grid">
-    <label>OracleStorage</label>
-    <input type="text" id="cfgOracle" placeholder="0x...">
-
-    <label>P2PEnergyMarket</label>
-    <input type="text" id="cfgMarket" placeholder="0x...">
-
-    <label>Stablecoin</label>
-    <input type="text" id="cfgStablecoin" readonly placeholder="(auto, via market.stablecoin())">
-  </div>
-  <button onclick="loadConfig()">Load</button>
-  <button class="secondary" onclick="refresh()">Refresh</button>
-  <div id="cfgStatus" class="muted" style="margin-top:6px; font-size:12px;"></div>
-</div>
-
 <nav class="subnav">
   <a href="#sec-households">Households</a>
   <a href="#sec-meter">Consumption &amp; production</a>
-  <a href="#sec-weather">Weather</a>
   <a href="#sec-battery">Battery</a>
   <a href="#sec-incentive">Incentive</a>
   <a href="#sec-market">Market &amp; Oracle</a>
   <a href="#sec-advanced">Advanced</a>
+  <a href="#" onclick="refresh(); return false;" style="margin-left:auto; border-color:#3a7fca;">Refresh ↻</a>
 </nav>
 
 <section id="sec-households" class="panel">
-  <h2>Households <span class="muted" style="font-weight:400; font-size:12px;">— known list ∪ market.getAllHouseholds() ∪ market.getAllProducers() (grid operator)</span></h2>
+  <h2>Households <span class="muted" style="font-weight:400; font-size:12px;">— known list ∪ market.getAllHouseholds()</span></h2>
 
   <div class="date-range">
     <label>From <input type="datetime-local" id="meterFrom"></label>
@@ -224,11 +140,10 @@
   <table id="householdsTable">
     <thead>
       <tr>
-        <th>ID</th><th>Address</th><th>Type</th>
+        <th>ID</th><th>Address</th>
         <th>Oracle reg.</th><th>Market reg.</th>
         <th>Consumption (Wh)</th><th>Production (Wh)</th><th>Meter time</th>
         <th>SoC %</th><th>Capacity (Wh)</th>
-        <th>Buy price /kWh</th><th>Sell price /kWh</th>
       </tr>
     </thead>
     <tbody></tbody>
@@ -242,18 +157,6 @@
   <div id="meterCharts"></div>
 </section>
 
-<section id="sec-weather" class="panel">
-  <h2>Weather <span class="muted" style="font-weight:400; font-size:12px;">— irradiance &amp; temperature, from OracleStorage.WeatherUpdated events; range set above</span></h2>
-
-  <div class="stat-row" id="weatherStats"></div>
-  <div id="weatherHistoryStatus" class="muted" style="margin-bottom:8px"></div>
-
-  <h2 style="font-size:13px; margin-top:4px;">Irradiance (W/m²)</h2>
-  <svg id="weatherIrradianceChart" style="width:100%; height:200px; display:block;"></svg>
-
-  <h2 style="font-size:13px; margin-top:16px;">Temperature (°C)</h2>
-  <svg id="weatherTemperatureChart" style="width:100%; height:200px; display:block;"></svg>
-</section>
 
 <section id="sec-battery" class="panel">
   <h2>BatteryManager <span class="muted" style="font-weight:400; font-size:12px;">— phase 2, battery charge cycles</span></h2>
@@ -277,7 +180,7 @@
   <div id="batterySocCharts"></div>
 
   <details id="batteryEventsDetails" class="panel chart-card" style="margin-top:14px;">
-    <summary id="batteryEventsSummary">Decision log — charge/discharge messages</summary>
+    <summary>Decision log — charge/discharge messages</summary>
     <table id="batteryEventsTable">
       <thead>
         <tr>
@@ -310,7 +213,22 @@
   <table id="incentiveEventsTable" style="margin-top:14px;">
     <thead>
       <tr>
-        <th>Time</th><th>Household</th><th>New score</th><th>Deviation (‰)</th>
+        <th>Time</th><th>Household</th><th>New score</th><th>Consumption dev. (‰)</th><th>Production dev. (‰)</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <h2 style="margin-top:20px">Forecast vs. Actual <span class="muted" style="font-weight:400; font-size:12px;">— last slots, per household</span></h2>
+  <button onclick="loadForecastVsActual()">Load / refresh</button>
+  <div id="forecastActualStatus" class="muted" style="margin-top:8px"></div>
+
+  <table id="forecastActualTable" style="margin-top:14px;">
+    <thead>
+      <tr>
+        <th>Slot</th><th>Household</th>
+        <th>Forecast cons. (Wh)</th><th>Actual cons. (Wh)</th>
+        <th>Forecast prod. (Wh)</th><th>Actual prod. (Wh)</th>
       </tr>
     </thead>
     <tbody></tbody>
@@ -323,8 +241,6 @@
     <div>
       <h2>OracleStorage</h2>
       <div class="kv" id="oracleKv"></div>
-      <h2 style="margin-top:16px">Weather (latest slot)</h2>
-      <div class="kv" id="weatherKv"></div>
     </div>
     <div>
       <h2>P2PEnergyMarket</h2>
@@ -359,100 +275,18 @@
 </details>
 
 <script>
-const RPC_URL = "https://ethereum-sepolia-rpc.publicnode.com";
-const ZERO = "0x0000000000000000000000000000000000000000";
-
-const ORACLE_ABI = [
-  {"inputs":[{"internalType":"address","name":"household","type":"address"}],"name":"getLatestMeterReading","outputs":[{"components":[{"internalType":"uint256","name":"consumptionWh","type":"uint256"},{"internalType":"uint256","name":"productionWh","type":"uint256"},{"internalType":"uint256","name":"timestamp","type":"uint256"}],"internalType":"struct IOracleStorage.MeterReading","name":"","type":"tuple"}],"stateMutability":"view","type":"function"},
-  {"inputs":[{"internalType":"address","name":"household","type":"address"}],"name":"getLatestBatteryState","outputs":[{"components":[{"internalType":"uint256","name":"socPercent","type":"uint256"},{"internalType":"uint256","name":"capacityWh","type":"uint256"},{"internalType":"uint256","name":"maxRateWh","type":"uint256"},{"internalType":"uint256","name":"timestamp","type":"uint256"}],"internalType":"struct IOracleStorage.BatteryState","name":"","type":"tuple"}],"stateMutability":"view","type":"function"},
-  {"inputs":[],"name":"getLatestWeather","outputs":[{"components":[{"internalType":"uint256","name":"irradianceWm2","type":"uint256"},{"internalType":"int256","name":"temperatureC","type":"int256"},{"internalType":"uint256","name":"cloudCover","type":"uint256"},{"internalType":"uint256","name":"timestamp","type":"uint256"}],"internalType":"struct IOracleStorage.WeatherData","name":"","type":"tuple"}],"stateMutability":"view","type":"function"},
-  {"inputs":[],"name":"getCurrentSlot","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
-  {"inputs":[{"internalType":"address","name":"household","type":"address"}],"name":"isHouseholdRegistered","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"view","type":"function"},
-  {"inputs":[],"name":"owner","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},
-  {"inputs":[],"name":"startTimestamp","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
-  {"inputs":[],"name":"SLOT_DURATION","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
-  {"inputs":[{"internalType":"address","name":"","type":"address"}],"name":"authorizedOracles","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"view","type":"function"},
-  {"anonymous":false,"inputs":[
-    {"indexed":true,"internalType":"address","name":"household","type":"address"},
-    {"indexed":false,"internalType":"uint256","name":"slot","type":"uint256"},
-    {"indexed":false,"internalType":"uint256","name":"consumption","type":"uint256"},
-    {"indexed":false,"internalType":"uint256","name":"production","type":"uint256"}
-  ],"name":"MeterUpdated","type":"event"},
-  {"anonymous":false,"inputs":[
-    {"indexed":true,"internalType":"address","name":"household","type":"address"},
-    {"indexed":false,"internalType":"uint256","name":"slot","type":"uint256"},
-    {"indexed":false,"internalType":"uint256","name":"soc","type":"uint256"}
-  ],"name":"BatteryUpdated","type":"event"},
-  {"anonymous":false,"inputs":[
-    {"indexed":false,"internalType":"uint256","name":"slot","type":"uint256"},
-    {"indexed":false,"internalType":"uint256","name":"irradiance","type":"uint256"},
-    {"indexed":false,"internalType":"int256","name":"temperature","type":"int256"}
-  ],"name":"WeatherUpdated","type":"event"}
-];
-
-const MARKET_ABI = [
-  {"inputs":[],"name":"owner","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},
-  {"inputs":[],"name":"stablecoin","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},
-  {"inputs":[],"name":"oracle","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},
-  {"inputs":[],"name":"energyPricePerKwh","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
-  {"inputs":[],"name":"lastSettledSlot","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
-  {"inputs":[],"name":"batteryManager","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},
-  {"inputs":[],"name":"incentiveController","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},
-  {"inputs":[],"name":"getHouseholdCount","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
-  {"inputs":[],"name":"getAllHouseholds","outputs":[{"internalType":"address[]","name":"","type":"address[]"}],"stateMutability":"view","type":"function"},
-  {"inputs":[{"internalType":"address","name":"","type":"address"}],"name":"isRegistered","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"view","type":"function"},
-  {"inputs":[],"name":"householdToProducerPrice","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
-  {"inputs":[],"name":"producerToHouseholdPrice","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
-  {"inputs":[],"name":"getAllProducers","outputs":[{"internalType":"address[]","name":"","type":"address[]"}],"stateMutability":"view","type":"function"},
-  {"inputs":[{"internalType":"address","name":"","type":"address"}],"name":"isRegisteredProducer","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"view","type":"function"},
-  {"inputs":[],"name":"settleSlot","outputs":[],"stateMutability":"nonpayable","type":"function"}
-];
-
-// Phase 2: BatteryManager. Decision struct order must exactly match BatteryManager.sol:
-// (action, amountWh, slot, timestamp).
-const BATTERY_ABI = [
-  {"inputs":[],"name":"owner","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},
-  {"inputs":[],"name":"oracle","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},
-  {"inputs":[{"internalType":"address","name":"","type":"address"}],"name":"isManaged","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"view","type":"function"},
-  {"inputs":[],"name":"getManagedHouseholds","outputs":[{"internalType":"address[]","name":"","type":"address[]"}],"stateMutability":"view","type":"function"},
-  {"inputs":[{"internalType":"address","name":"household","type":"address"}],"name":"getLastDecision","outputs":[{"components":[{"internalType":"enum IBatteryManager.Action","name":"action","type":"uint8"},{"internalType":"uint256","name":"amountWh","type":"uint256"},{"internalType":"uint256","name":"slot","type":"uint256"},{"internalType":"uint256","name":"timestamp","type":"uint256"}],"internalType":"struct BatteryManager.Decision","name":"","type":"tuple"}],"stateMutability":"view","type":"function"},
-  {"anonymous":false,"inputs":[
-    {"indexed":true,"internalType":"address","name":"household","type":"address"},
-    {"indexed":false,"internalType":"enum IBatteryManager.Action","name":"action","type":"uint8"},
-    {"indexed":false,"internalType":"uint256","name":"amountWh","type":"uint256"},
-    {"indexed":false,"internalType":"uint256","name":"slot","type":"uint256"},
-    {"indexed":false,"internalType":"string","name":"reason","type":"string"}
-  ],"name":"DecisionMade","type":"event"}
-];
-
-// Phase 3: IncentiveController (see IncentiveController.sol / IIncentiveController.sol —
-// not part of the uploaded contract set, ABI kept as previously used).
-const INCENTIVE_ABI = [
-  {"inputs":[],"name":"owner","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},
-  {"inputs":[{"internalType":"address","name":"household","type":"address"}],"name":"getReputationScore","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
-  {"inputs":[{"internalType":"address","name":"household","type":"address"}],"name":"getPriceMultiplier","outputs":[{"internalType":"uint256","name":"multiplier","type":"uint256"}],"stateMutability":"view","type":"function"},
-  {"anonymous":false,"inputs":[
-    {"indexed":true,"internalType":"address","name":"household","type":"address"},
-    {"indexed":false,"internalType":"uint256","name":"newScore","type":"uint256"},
-    {"indexed":false,"internalType":"uint256","name":"deviation","type":"uint256"}
-  ],"name":"ScoreUpdated","type":"event"}
-];
+// RPC_URL, ZERO, ORACLE_ABI, MARKET_ABI, BATTERY_ABI, INCENTIVE_ABI, $ and
+// short all come from ../shared.js (loaded in <head>) — it declares the
+// union of every page's ABI needs, so this page's superset (getCurrentSlot,
+// DecisionMade, ScoreUpdated, etc.) is already covered there. Redeclaring
+// any of them here with `const`/`let` would throw ("already declared").
 
 const ACTION_NAMES = ["IDLE", "CHARGE", "DISCHARGE"];
 const ACTION_CLASS = ["idle", "charge", "discharge"];
-// Shared charge/idle/discharge palette for the SoC chart — same colors as the
-// .badge classes above, so the line, its background shading and the decision
-// log badges all agree: green while charging, gray while idle, orange/amber
-// while discharging.
-const ACTION_LINE_COLOR = { 0: "#9aa0ab", 1: "#4ade80", 2: "#fbbf24" };
-const ACTION_BG_COLOR = {
-  0: "rgba(154, 160, 171, 0.12)",
-  1: "rgba(74, 222, 128, 0.16)",
-  2: "rgba(251, 191, 36, 0.16)"
-};
+// Background shading behind the SoC chart, keyed by action index (1=CHARGE, 2=DISCHARGE).
+// IDLE (0) has no entry, so it's left unshaded.
+const ACTION_BAND_COLOR = { 1: "rgba(74, 222, 128, 0.16)", 2: "rgba(248, 113, 113, 0.16)" };
 
-const $ = id => document.getElementById(id);
-const short = a => a ? a.slice(0,6) + "…" + a.slice(-4) : "-";
 const fmtTs = ts => Number(ts) === 0 ? "-" : new Date(Number(ts) * 1000).toLocaleString();
 const wei6 = v => (Number(v) / 1e6).toFixed(6);
 
@@ -464,7 +298,7 @@ function svgEl(tag, attrs) {
 }
 
 // ─────────────────────────────────────────────────────────────
-//  Shared hover tooltip for all line charts (meter, weather, battery SoC)
+//  Shared hover tooltip for all line charts (meter, battery SoC)
 // ─────────────────────────────────────────────────────────────
 
 const chartTooltip = document.createElement("div");
@@ -555,14 +389,7 @@ function attachHoverTooltip(svg, xScale, yScale, box, events, keySpecs) {
   overlay.addEventListener("mouseleave", onLeave);
 }
 
-function copyAddress(addr, btn) {
-  navigator.clipboard.writeText(addr).then(() => {
-    const original = btn.textContent;
-    btn.textContent = "✓";
-    btn.classList.add("done");
-    setTimeout(() => { btn.textContent = original; btn.classList.remove("done"); }, 1200);
-  }).catch(() => { alert(addr); });
-}
+// copyAddress() comes from ../shared.js.
 
 function addrCell(addr, id) {
   const label = id ? id : short(addr);
@@ -593,9 +420,14 @@ function kvAddrRow(container, key, addr, cls) {
 //  stays fully reproducible from a link, same as elsewhere on this site.
 // ─────────────────────────────────────────────────────────────
 
-let cfg = { oracle: "", market: "", stablecoin: "", batteryOverride: "", incentiveOverride: "", households: [] };
+// `cfg` and `readWeb3` are declared with `let` in ../shared.js (loaded in
+// <head>) — reused here by mutation/assignment rather than redeclared, plus
+// this page's own extra fields (an override wins over the on-chain value
+// from the market until it's linked via setBatteryManager()/etc.).
+cfg.batteryOverride = "";
+cfg.incentiveOverride = "";
+cfg.households = [];
 let effectiveBattery = "", effectiveIncentive = "";
-let readWeb3;
 
 // Shared connection/household state so buttons like loadBatteryEvents() don't
 // need to reparse config / reconnect every time.
@@ -612,54 +444,18 @@ let incentiveContract = null;
 let currentStartTimestamp = 0;
 let currentSlotDuration = 60;
 
-function readParamFromUrl(name) {
-  try {
-    const v = new URLSearchParams(window.location.search).get(name);
-    return v ? v.trim() : null;
-  } catch (e) { return null; }
-}
+// readParamFromUrl(), syncParamsToUrl() and setupNav() come from ../shared.js
+// unchanged — setupNav() already wires all five nav targets (including the
+// self-link back to this page) plus the "active" class.
 
-function syncParamsToUrl(params) {
-  try {
-    const url = new URL(window.location.href);
-    for (const [key, value] of Object.entries(params)) {
-      if (value) url.searchParams.set(key, value);
-      else url.searchParams.delete(key);
-    }
-    history.replaceState(null, "", url.toString());
-  } catch (e) {
-    console.warn("syncParamsToUrl failed:", e.message);
-  }
-}
-
-// The nav targets carry the current oracle/market/etc. config over as URL
-// params, same as this page. window.location.search can change after load
-// (e.g. via the "Load" button, which rewrites it with history.replaceState),
-// so the href is set on click using the CURRENT search string rather than a
-// value captured once here — otherwise switching views after loading a
-// different config would silently carry over stale, cached params.
-function setupNav() {
-  const navTargets = {
-    navHome: "../index.html",
-    navAdmin: "../admin/index.html",
-    navSelfservice: "../selfservice/index.html",
-    navTransactions: "../transactions/index.html"
-  };
-  for (const [id, path] of Object.entries(navTargets)) {
-    const link = $(id);
-    if (!link) continue;
-    link.href = path + window.location.search; // best-effort initial value (hover/open-in-new-tab)
-    link.addEventListener("click", (e) => {
-      e.preventDefault();
-      window.location.href = path + window.location.search;
-    });
-  }
-}
-
+// Overrides ../shared.js's applyConfigToForm() to also fill this page's
+// Advanced-section fields (battery/incentive override, known households).
 function applyConfigToForm() {
   $("cfgOracle").value = cfg.oracle || "";
   $("cfgMarket").value = cfg.market || "";
   $("cfgStablecoin").value = cfg.stablecoin || "";
+  $("cfgBattery").value = (cfg.battery && cfg.battery !== ZERO) ? cfg.battery : "";
+  $("cfgIncentive").value = (cfg.incentive && cfg.incentive !== ZERO) ? cfg.incentive : "";
   $("cfgBatteryOverride").value = cfg.batteryOverride || "";
   $("cfgIncentiveOverride").value = cfg.incentiveOverride || "";
   $("cfgHouseholds").value = JSON.stringify(cfg.households || [], null, 2);
@@ -736,16 +532,14 @@ async function refresh() {
     await fetchDerivedAddresses();
 
     const [
-      oOwner, currentSlot, startTs, slotDuration, weather,
+      oOwner, currentSlot, startTs, slotDuration,
       mOwner, mStablecoin, mOracle, price, lastSettled,
-      battMgr, incCtrl, hhCount, allHouseholds,
-      gridBuyPrice, gridSellPrice, allProducers
+      battMgr, incCtrl, hhCount, allHouseholds
     ] = await Promise.all([
       oracle.methods.owner().call(),
       oracle.methods.getCurrentSlot().call(),
       oracle.methods.startTimestamp().call(),
       oracle.methods.SLOT_DURATION().call(),
-      oracle.methods.getLatestWeather().call(),
       market.methods.owner().call(),
       market.methods.stablecoin().call(),
       market.methods.oracle().call(),
@@ -754,10 +548,7 @@ async function refresh() {
       market.methods.batteryManager().call(),
       market.methods.incentiveController().call(),
       market.methods.getHouseholdCount().call(),
-      market.methods.getAllHouseholds().call(),
-      market.methods.householdToProducerPrice().call(),
-      market.methods.producerToHouseholdPrice().call(),
-      market.methods.getAllProducers().call()
+      market.methods.getAllHouseholds().call()
     ]);
 
     currentStartTimestamp = Number(startTs);
@@ -770,22 +561,18 @@ async function refresh() {
     kvRow(oracleKv, "Start", fmtTs(startTs));
     kvRow(oracleKv, "Slot duration", slotDuration + "s");
 
-    const weatherKv = $("weatherKv"); weatherKv.innerHTML = "";
-    kvRow(weatherKv, "Irradiance", weather.irradianceWm2 + " W/m²");
-    kvRow(weatherKv, "Temperature", (Number(weather.temperatureC) / 10).toFixed(1) + " °C");
-    kvRow(weatherKv, "Cloud cover", weather.cloudCover + " %");
-    kvRow(weatherKv, "Time", fmtTs(weather.timestamp));
-    renderWeatherStats(weather);
-
     const marketKv = $("marketKv"); marketKv.innerHTML = "";
     kvAddrRow(marketKv, "Address", cfg.market);
     kvAddrRow(marketKv, "Owner", mOwner);
     kvAddrRow(marketKv, "Stablecoin", mStablecoin, "ok");
     kvAddrRow(marketKv, "Oracle", mOracle, mOracle.toLowerCase() === cfg.oracle.toLowerCase() ? "ok" : "bad");
-    kvRow(marketKv, "Price / kWh (household ↔ household)", wei6(price) + " token (" + price + " units)");
-    kvRow(marketKv, "Grid buy price / kWh (household → grid)", wei6(gridBuyPrice) + " token (" + gridBuyPrice + " units)");
-    kvRow(marketKv, "Grid sell price / kWh (grid → household)", wei6(gridSellPrice) + " token (" + gridSellPrice + " units)");
+    kvRow(marketKv, "Price / kWh", wei6(price) + " token (" + price + " units)");
     kvRow(marketKv, "Last settled slot", lastSettled);
+
+    // Also feeds the header's read-only cfgBattery/cfgIncentive fields.
+    cfg.battery = battMgr;
+    cfg.incentive = incCtrl;
+    applyConfigToForm();
 
     // A manual BatteryManager/IncentiveController override (Advanced section)
     // wins over the on-chain value from the market — useful while it hasn't
@@ -813,11 +600,8 @@ async function refresh() {
     // OracleStorage has no enumeration function, so union market.getAllHouseholds()
     // with the manually maintained known-households list (also catches households
     // that report meter data but aren't market-registered yet).
-    await loadHouseholds(oracle, market, cfg.households, allHouseholds, allProducers, {
-      p2pPrice: price, gridBuyPrice, gridSellPrice
-    });
+    await loadHouseholds(oracle, market, cfg.households, allHouseholds);
     await loadMeterHistory();
-    await loadWeatherHistory();
     await loadBatteryManager(web3, oracle, effectiveBattery, cfg.households, allHouseholds);
     await loadIncentiveController(web3, effectiveIncentive, currentHouseholds);
 
@@ -858,102 +642,49 @@ function renderHouseholdStats(activeHouseholds, avgConsumption, avgProduction) {
     tile("Avg. net / reading", `${net >= 0 ? "+" : ""}${net} Wh`, net >= 0 ? "ok" : "bad");
 }
 
-// onChainProducers = market.getAllProducers() (e.g. the grid operator, registered
-// via registerProducer() rather than registerHousehold()) — shown in the same
-// table as households, but with grid buy/sell price instead of the P2P price
-// and without battery data. A producer doesn't report its own meter reading
-// to the oracle, so its consumption/production is instead DERIVED from the
-// combined net of the regular households (see the comment above the loop
-// below) rather than read from the chain.
-async function loadHouseholds(oracle, market, knownHouseholds, onChainAddresses, onChainProducers, prices) {
+async function loadHouseholds(oracle, market, knownHouseholds, onChainAddresses) {
   const tbody = document.querySelector("#householdsTable tbody");
   tbody.innerHTML = "";
 
   const households = mergeHouseholds(knownHouseholds, onChainAddresses);
   currentHouseholds = households;
 
-  const householdAddrs = new Set(households.map(h => h.address.toLowerCase()));
-  const producers = mergeHouseholds(knownHouseholds, onChainProducers)
-    .filter(p => !householdAddrs.has(p.address.toLowerCase()));
-
-  const allRows = [
-    ...households.map(h => ({ ...h, type: "household" })),
-    ...producers.map(p => ({ ...p, type: "producer" }))
-  ];
-
-  if (allRows.length === 0) {
+  if (households.length === 0) {
     $("householdStats").innerHTML = "";
-    $("householdsStatus").innerHTML = `<span class="muted">No households or producers known — neither in the list nor registered in the market.</span>`;
+    $("householdsStatus").innerHTML = `<span class="muted">No households known — neither in the list nor registered in the market.</span>`;
     return;
   }
 
-  $("householdsStatus").textContent = `Loading ${allRows.length} entr${allRows.length === 1 ? "y" : "ies"}…`;
+  $("householdsStatus").textContent = `Loading ${households.length} household(s)…`;
 
   try {
-    const rows = await Promise.all(allRows.map(async (h) => {
-      const isProducer = h.type === "producer";
+    const rows = await Promise.all(households.map(async (h) => {
       const [oracleReg, marketReg, meter, batt] = await Promise.all([
         oracle.methods.isHouseholdRegistered(h.address).call(),
-        isProducer
-          ? market.methods.isRegisteredProducer(h.address).call()
-          : market.methods.isRegistered(h.address).call(),
+        market.methods.isRegistered(h.address).call(),
         oracle.methods.getLatestMeterReading(h.address).call(),
         oracle.methods.getLatestBatteryState(h.address).call()
       ]);
-      const buyPrice = isProducer ? prices.gridBuyPrice : prices.p2pPrice;
-      const sellPrice = isProducer ? prices.gridSellPrice : prices.p2pPrice;
-      return { ...h, oracleReg, marketReg, meter, batt, buyPrice, sellPrice };
+      return { ...h, oracleReg, marketReg, meter, batt };
     }));
 
-    // The grid only shows up as a counterparty once households are net long or
-    // net short — it doesn't have its own meter reading. So its consumption/
-    // production is derived from the combined net of the regular households'
-    // latest readings (the same numbers already shown in their own rows):
-    //   net = Σ production − Σ consumption
-    //   net > 0 (households collectively over-produce) -> the surplus flows
-    //     OUT to the grid, i.e. the grid "consumes" it.
-    //   net < 0 (households collectively fall short) -> the shortfall flows
-    //     IN from the grid, i.e. the grid "produces" it.
-    // If there are multiple registered producers, the same derived figure is
-    // shown on each row — the split between them isn't observable from here,
-    // only the on-chain settlement (_matchAndSettle) actually decides that.
-    const householdRows = rows.filter(r => r.type === "household");
-    let netWh = 0;
-    let latestHouseholdTs = 0;
-    for (const h of householdRows) {
-      netWh += Number(h.meter.productionWh) - Number(h.meter.consumptionWh);
-      latestHouseholdTs = Math.max(latestHouseholdTs, Number(h.meter.timestamp));
-    }
-    const gridConsumptionWh = netWh > 0 ? netWh : 0;
-    const gridProductionWh = netWh < 0 ? -netWh : 0;
-    const gridTitle = 'title="Derived from the net production/consumption of the registered households — not read from the oracle."';
-
     for (const r of rows) {
-      const isProducer = r.type === "producer";
-      const dash = '<span class="muted">-</span>';
       const tr = document.createElement("tr");
       tr.innerHTML = `
         <td>${r.id}</td>
         <td>${addrCell(r.address)}</td>
-        <td>${isProducer ? '<span class="badge idle">Grid operator</span>' : '<span class="badge household">Household</span>'}</td>
         <td class="${r.oracleReg ? "ok" : "bad"}">${r.oracleReg ? "✓" : "✗"}</td>
         <td class="${r.marketReg ? "ok" : "bad"}">${r.marketReg ? "✓" : "✗"}</td>
-        <td ${isProducer ? gridTitle : ""}>${isProducer ? gridConsumptionWh : r.meter.consumptionWh}</td>
-        <td ${isProducer ? gridTitle : ""}>${isProducer ? gridProductionWh : r.meter.productionWh}</td>
-        <td>${isProducer ? (latestHouseholdTs ? fmtTs(latestHouseholdTs) : dash) : fmtTs(r.meter.timestamp)}</td>
-        <td>${!isProducer && r.batt.capacityWh > 0 ? r.batt.socPercent + "%" : "-"}</td>
-        <td>${!isProducer && r.batt.capacityWh > 0 ? r.batt.capacityWh : "-"}</td>
-        <td>${wei6(r.buyPrice)}</td>
-        <td>${wei6(r.sellPrice)}</td>
+        <td>${r.meter.consumptionWh}</td>
+        <td>${r.meter.productionWh}</td>
+        <td>${fmtTs(r.meter.timestamp)}</td>
+        <td>${r.batt.capacityWh > 0 ? r.batt.socPercent + "%" : "-"}</td>
+        <td>${r.batt.capacityWh > 0 ? r.batt.capacityWh : "-"}</td>
       `;
       tbody.appendChild(tr);
     }
 
-    const householdCount = rows.filter(r => r.type === "household").length;
-    const producerCount = rows.filter(r => r.type === "producer").length;
-    $("householdsStatus").innerHTML = `<span class="ok">${householdCount} household(s)` +
-      (producerCount > 0 ? ` + ${producerCount} grid operator/producer(s)` : "") +
-      ` loaded (${rows.filter(r => r.marketReg).length} registered in the market).</span>`;
+    $("householdsStatus").innerHTML = `<span class="ok">${rows.length} household(s) loaded (${rows.filter(r=>r.marketReg).length} registered in the market).</span>`;
   } catch (e) {
     console.error(e);
     $("householdsStatus").innerHTML = `<span class="bad">Error loading household data: ${e.message}</span>`;
@@ -988,7 +719,6 @@ function setMeterRangePreset(hours) {
 
 function applySelectedRange() {
   loadMeterHistory();
-  loadWeatherHistory();
 }
 
 function getMeterRange() {
@@ -1027,8 +757,8 @@ function actionBadge(actionNum) {
   return `<span class="badge ${cls}">${name}</span>`;
 }
 
-// Shared pipeline for loadMeterHistory() and loadWeatherHistory(), which only
-// differ in mapFn (field mapping).
+// Shared pipeline for loadMeterHistory() (and other ranged-event loaders),
+// parameterized by mapFn (field mapping).
 //
 // Timestamp is computed from the slot (startTimestamp + slot*SLOT_DURATION),
 // NOT from the tx's block timestamp: oracle_writer.py can send several
@@ -1123,55 +853,6 @@ function buildMeterCard(id) {
   return { card, svg };
 }
 
-// Cloud cover has no history: WeatherUpdated doesn't emit it (only
-// slot/irradiance/temperature), so it's shown as a current stat only, not a chart.
-function renderWeatherStats(weather) {
-  const el = $("weatherStats");
-  const tile = (label, value) => `<div class="stat-tile"><div class="label">${label}</div><div class="value">${value}</div></div>`;
-  el.innerHTML =
-    tile("Cloud cover (current)", `${weather.cloudCover}%`) +
-    tile("Irradiance (current)", `${weather.irradianceWm2} W/m²`) +
-    tile("Temperature (current)", `${(Number(weather.temperatureC) / 10).toFixed(1)} °C`);
-}
-
-async function loadWeatherHistory() {
-  const statusEl = $("weatherHistoryStatus");
-  const irradianceSvg = $("weatherIrradianceChart");
-  const temperatureSvg = $("weatherTemperatureChart");
-
-  if (!oracleContract || !readWeb3) {
-    statusEl.innerHTML = `<span class="muted">Refresh above first to connect to the chain.</span>`;
-    return;
-  }
-
-  statusEl.textContent = "Loading WeatherUpdated events…";
-
-  try {
-    const { enriched, fromTs, toTs, fromBlock } = await fetchRangedEvents("WeatherUpdated", (e, timestamp) => ({
-      timestamp,
-      slot: e.returnValues.slot,
-      irradiance: Number(e.returnValues.irradiance),
-      temperatureC: Number(e.returnValues.temperature) / 10
-    }));
-
-    if (enriched.length === 0) {
-      clearChart(irradianceSvg, "No data in the selected range.");
-      clearChart(temperatureSvg, "No data in the selected range.");
-      statusEl.innerHTML = `<span class="muted">No WeatherUpdated events found in the selected range (queried from block ${fromBlock}).</span>`;
-      return;
-    }
-
-    drawWeatherChart(irradianceSvg, enriched, "irradiance", "#fbbf24", " W/m²", true, "Irradiance");
-    drawWeatherChart(temperatureSvg, enriched, "temperatureC", "#60a5fa", " °C", false, "Temperature", 1);
-
-    statusEl.innerHTML = `<span class="ok">${enriched.length} event(s) loaded (${new Date(fromTs * 1000).toLocaleString()} – ${new Date(toTs * 1000).toLocaleString()}, from block ${fromBlock}).</span>`;
-
-  } catch (e) {
-    console.error(e);
-    statusEl.innerHTML = `<span class="bad">Error loading weather events: ${e.message}</span>`;
-  }
-}
-
 // Catmull-Rom -> cubic Bezier so peaks between readings are rounded rather than
 // sharp. yBounds [yMin, yMax] (pixel-Y, optional) clamps control points to the
 // valid axis range: since a cubic Bezier always stays within the convex hull of
@@ -1243,10 +924,10 @@ function formatHourTick(t, spanSeconds) {
 }
 
 // Axes + gridlines for a time line chart; returns scaling functions and yBounds
-// (pixel-Y bounds for smoothPathD(), see above). Shared by drawMeterChart(),
-// drawWeatherChart() and drawSocChart(). `bands` (optional) are background
-// rects — e.g. charge/discharge shading behind the SoC line — drawn first so
-// gridlines/axis/series render on top of them.
+// (pixel-Y bounds for smoothPathD(), see above). Shared by drawMeterChart()
+// and drawSocChart(). `bands` (optional) are background rects — e.g.
+// charge/discharge shading behind the SoC line — drawn first so gridlines/
+// axis/series render on top of them.
 function initChart(svg, tMin, tMax, minVal, maxVal, bands) {
   svg.innerHTML = "";
 
@@ -1333,24 +1014,6 @@ function drawMeterChart(svg, events) {
   ]);
 }
 
-// Y-axis follows the actual value range (+15% margin) instead of always starting
-// at 0, since e.g. temperature can be negative. floorAtZero still enforces a
-// lower bound of 0 for quantities that can never physically be negative (irradiance).
-function drawWeatherChart(svg, events, key, color, unit, floorAtZero, label, decimals) {
-  const tMin = events[0].timestamp, tMax = events[events.length - 1].timestamp;
-  const vals = events.map(e => e[key]);
-  const rawMin = Math.min(...vals), rawMax = Math.max(...vals);
-  const margin = Math.max(1, (rawMax - rawMin) * 0.15);
-  const minVal = floorAtZero ? Math.max(0, rawMin - margin) : rawMin - margin;
-  const { xScale, yScale, yBounds, box } = initChart(svg, tMin, tMax, minVal, rawMax + margin);
-  const segments = splitContiguous(events);
-
-  drawLineSeries(svg, segments, xScale, yScale, yBounds, key, color);
-  attachHoverTooltip(svg, xScale, yScale, box, events, [
-    { key, color, label: label || key, unit, decimals }
-  ]);
-}
-
 function clearChart(svg, message) {
   svg.innerHTML = "";
   svg.setAttribute("viewBox", "0 0 400 40");
@@ -1376,7 +1039,6 @@ async function loadBatteryManager(web3, oracle, battMgrAddress, knownHouseholds,
     document.querySelector("#batteryEventsTable tbody").innerHTML = "";
     $("batteryEventsStatus").textContent = "";
     $("batteryEventsDetails").open = false;
-    $("batteryEventsSummary").textContent = "Decision log — charge/discharge messages";
     return;
   }
 
@@ -1503,10 +1165,7 @@ async function loadBatteryEvents() {
       .sort((a, b) => a.timestamp - b.timestamp);
 
     renderBatterySocCharts(socEnriched, idByAddress, enriched);
-    // Collapsed by default — the transaction/decision log is shown on demand
-    // (click to expand) rather than dumped into view right after loading.
-    $("batteryEventsSummary").textContent =
-      `Decision log — charge/discharge messages (${enriched.length})`;
+    $("batteryEventsDetails").open = enriched.length > 0;
 
     const parts = [];
     parts.push(enriched.length === 0
@@ -1581,82 +1240,39 @@ function buildSocCard(id) {
   const legend = document.createElement("div");
   legend.className = "chart-legend";
   legend.innerHTML = `
-    <span><span class="dot" style="background:${ACTION_LINE_COLOR[1]}"></span>Charging</span>
-    <span><span class="dot" style="background:${ACTION_LINE_COLOR[0]}"></span>Idle</span>
-    <span><span class="dot" style="background:${ACTION_LINE_COLOR[2]}"></span>Discharging</span>
+    <span><span class="dot" style="background:#4ade80"></span>Charging</span>
+    <span><span class="dot" style="background:#f87171"></span>Discharging</span>
   `;
   card.appendChild(legend);
 
   return { card, svg };
 }
 
-// Action holds from one DecisionMade event until the next (or until tMax for
-// the last one), fully tiling [tMin, tMax] — any gap before the first known
-// decision, or between two decisions, defaults to IDLE (action 0) rather than
-// being left uncovered, so the whole chart width is always shaded/colored.
+// Charge/discharge action holds from one DecisionMade event until the next
+// (or until tMax for the last one) — turned into background bands for initChart().
 function buildActionBands(actionEvents, tMin, tMax) {
-  const sorted = (actionEvents || []).slice().sort((a, b) => a.timestamp - b.timestamp);
+  if (!actionEvents || actionEvents.length === 0) return [];
+  const sorted = actionEvents.slice().sort((a, b) => a.timestamp - b.timestamp);
   const bands = [];
-  let cursor = tMin;
   for (let i = 0; i < sorted.length; i++) {
-    const start = Math.max(tMin, sorted[i].timestamp);
-    if (start > cursor) bands.push({ from: cursor, to: start, action: 0 }); // IDLE gap
-    const end = Math.min(tMax, i + 1 < sorted.length ? sorted[i + 1].timestamp : tMax);
-    if (end > start) bands.push({ from: start, to: end, action: sorted[i].action });
-    cursor = Math.max(cursor, end);
+    const color = ACTION_BAND_COLOR[sorted[i].action];
+    if (!color) continue; // IDLE — left unshaded
+    const from = Math.max(tMin, sorted[i].timestamp);
+    const to = Math.min(tMax, i + 1 < sorted.length ? sorted[i + 1].timestamp : tMax);
+    if (to > from) bands.push({ from, to, color });
   }
-  if (cursor < tMax) bands.push({ from: cursor, to: tMax, action: 0 }); // trailing IDLE gap
   return bands;
-}
-
-// Which action band (see buildActionBands()) a given timestamp falls into —
-// bands always tile [tMin, tMax] with no gaps, so this always resolves.
-function actionAtTime(t, bands) {
-  for (const b of bands) {
-    if (t >= b.from && t <= b.to) return b.action;
-  }
-  return 0; // IDLE fallback, shouldn't be reached given full tiling
-}
-
-// Splits an already-contiguous run of SoC points into per-action sub-runs, so
-// the line itself can be drawn in the matching charge/idle/discharge color
-// (Android-style) rather than one flat color. The boundary point is repeated
-// at the start of the next sub-run so the strokes still connect visually.
-function splitByAction(points, bands) {
-  if (points.length === 0) return [];
-  const runs = [];
-  let current = [points[0]];
-  let currentAction = actionAtTime(points[0].timestamp, bands);
-  for (let i = 1; i < points.length; i++) {
-    const action = actionAtTime(points[i].timestamp, bands);
-    if (action !== currentAction) {
-      current.push(points[i]);
-      runs.push({ action: currentAction, points: current });
-      current = [points[i]];
-      currentAction = action;
-    } else {
-      current.push(points[i]);
-    }
-  }
-  runs.push({ action: currentAction, points: current });
-  return runs;
 }
 
 function drawSocChart(svg, events, actionEvents) {
   const tMin = events[0].timestamp, tMax = events[events.length - 1].timestamp;
   const bands = buildActionBands(actionEvents, tMin, tMax);
-  const bgBands = bands.map(b => ({ from: b.from, to: b.to, color: ACTION_BG_COLOR[b.action] }));
-  const { xScale, yScale, yBounds, box } = initChart(svg, tMin, tMax, 0, 100, bgBands);
-  const gapSegments = splitContiguous(events);
+  const { xScale, yScale, yBounds, box } = initChart(svg, tMin, tMax, 0, 100, bands);
+  const segments = splitContiguous(events);
 
-  for (const seg of gapSegments) {
-    for (const run of splitByAction(seg, bands)) {
-      drawLineSeries(svg, [run.points], xScale, yScale, yBounds, "soc", ACTION_LINE_COLOR[run.action]);
-    }
-  }
-
+  drawLineSeries(svg, segments, xScale, yScale, yBounds, "soc", "#a78bfa");
   attachHoverTooltip(svg, xScale, yScale, box, events, [
-    { key: "soc", color: "#e6e6e6", label: "SoC", unit: "%" }
+    { key: "soc", color: "#a78bfa", label: "SoC", unit: "%" }
   ]);
 }
 
@@ -1739,7 +1355,8 @@ async function loadIncentiveEvents() {
       timestamp: tsByBlock.get(e.blockNumber) || 0,
       household: e.returnValues.household,
       newScore: e.returnValues.newScore,
-      deviation: e.returnValues.deviation
+      consumptionDeviation: e.returnValues.consumptionDeviation,
+      productionDeviation: e.returnValues.productionDeviation
     })).sort((a, b) => b.timestamp - a.timestamp);
 
     for (const ev of enriched) {
@@ -1749,7 +1366,8 @@ async function loadIncentiveEvents() {
         <td>${fmtTs(ev.timestamp)}</td>
         <td title="${ev.household}">${id}</td>
         <td>${ev.newScore}</td>
-        <td>${ev.deviation}</td>
+        <td>${ev.consumptionDeviation}</td>
+        <td>${ev.productionDeviation}</td>
       `;
       tbody.appendChild(tr);
     }
@@ -1760,6 +1378,72 @@ async function loadIncentiveEvents() {
   } catch (e) {
     console.error(e);
     statusEl.innerHTML = `<span class="bad">Error loading events: ${e.message}</span>`;
+  }
+}
+
+async function loadForecastVsActual() {
+  const statusEl = $("forecastActualStatus");
+  const tbody = document.querySelector("#forecastActualTable tbody");
+
+  if (!incentiveContract) {
+    statusEl.innerHTML = `<span class="muted">No IncentiveController linked — refresh above first.</span>`;
+    return;
+  }
+  if (!oracleContract) {
+    statusEl.innerHTML = `<span class="muted">Oracle not connected.</span>`;
+    return;
+  }
+
+  statusEl.textContent = "Loading forecast vs. actual…";
+  tbody.innerHTML = "";
+
+  try {
+    const currentSlot = Number(await oracleContract.methods.getCurrentSlot().call());
+    const ids = addressIdMap(currentHouseholds);
+    const MAX_SLOTS_BACK = 30;
+    const MAX_ROWS_PER_HOUSEHOLD = 6;
+
+    const rows = [];
+    for (const h of currentHouseholds) {
+      let found = 0;
+      for (let slot = currentSlot; slot >= 0 && slot > currentSlot - MAX_SLOTS_BACK && found < MAX_ROWS_PER_HOUSEHOLD; slot--) {
+        const forecast = await incentiveContract.methods.getForecast(h.address, slot).call();
+        if (Number(forecast.timestamp) === 0) continue; // keine Prognose fuer diesen Slot abgegeben
+        const actual = await incentiveContract.methods.getActual(h.address, slot).call();
+        rows.push({
+          slot,
+          household: h.address,
+          id: ids.get(h.address.toLowerCase()) || short(h.address),
+          forecastCons: forecast.expectedConsumptionWh,
+          actualCons: actual.actualConsumptionWh,
+          forecastProd: forecast.expectedProductionWh,
+          actualProd: actual.actualProductionWh
+        });
+        found++;
+      }
+    }
+
+    rows.sort((a, b) => b.slot - a.slot);
+
+    for (const r of rows) {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${r.slot}</td>
+        <td title="${r.household}">${r.id}</td>
+        <td>${r.forecastCons}</td>
+        <td>${r.actualCons}</td>
+        <td>${r.forecastProd}</td>
+        <td>${r.actualProd}</td>
+      `;
+      tbody.appendChild(tr);
+    }
+
+    statusEl.innerHTML = rows.length === 0
+      ? `<span class="muted">No forecast/actual pairs found in the last ${MAX_SLOTS_BACK} slots.</span>`
+      : `<span class="ok">${rows.length} row(s) loaded.</span>`;
+  } catch (e) {
+    console.error(e);
+    statusEl.innerHTML = `<span class="bad">Error loading forecast/actual data: ${e.message}</span>`;
   }
 }
 
@@ -1809,7 +1493,8 @@ async function init() {
   await refresh();
 }
 
-init();
+// init() is called once the shared header (nav/config/wallet elements) has
+// been fetched and injected — see the header-placeholder script above.
 </script>
 
 </body>

@@ -4,127 +4,26 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Energy Trading — Transactions</title>
+
+<link rel="stylesheet" href="../shared.css">
+
 <script src="https://cdn.jsdelivr.net/npm/web3@1.10.4/dist/web3.min.js"></script>
-<style>
-  * { box-sizing: border-box; }
-  body {
-    font-family: -apple-system, Segoe UI, Roboto, sans-serif;
-    background: #0f1115;
-    color: #e6e6e6;
-    margin: 0;
-    padding: 24px;
-  }
-  h1 { font-size: 20px; margin: 0 0 4px; }
-  h2 { font-size: 15px; margin: 0 0 10px; color: #9fd3ff; }
-  .sub { color: #888; font-size: 13px; margin-bottom: 16px; }
-  .topnav { display: flex; gap: 4px; margin-bottom: 18px; border-bottom: 1px solid #22262f; padding-bottom: 12px; }
-  .topnav a {
-    color: #9fd3ff; text-decoration: none; font-size: 13px;
-    padding: 6px 12px; border-radius: 6px; background: #171a21; border: 1px solid #2a2e38;
-  }
-  .topnav a.active { background: #2b6cb0; color: #fff; border-color: #2b6cb0; }
-  .topnav a:hover:not(.active) { background: #1c2028; }
-  .panel {
-    background: #171a21;
-    border: 1px solid #2a2e38;
-    border-radius: 8px;
-    padding: 16px 18px;
-    margin-bottom: 16px;
-  }
-  .config-grid {
-    display: grid;
-    grid-template-columns: 160px 1fr;
-    gap: 8px 12px;
-    align-items: center;
-  }
-  .config-grid label { font-size: 12px; color: #aaa; }
-  input[type=text], input[type=number] {
-    width: 100%;
-    background: #0f1115;
-    border: 1px solid #333944;
-    color: #e6e6e6;
-    border-radius: 4px;
-    padding: 6px 8px;
-    font-family: ui-monospace, Consolas, monospace;
-    font-size: 12px;
-  }
-  input[readonly] { color: #999; background: #14161b; }
-  button {
-    background: #2b6cb0;
-    color: #fff;
-    border: none;
-    border-radius: 4px;
-    padding: 8px 16px;
-    font-size: 13px;
-    cursor: pointer;
-    margin-top: 10px;
-    margin-right: 8px;
-  }
-  button:hover { background: #3a7fca; }
-  button.copy { background: #262b35; padding: 2px 6px; font-size: 11px; margin: 0 0 0 6px; border: 1px solid #333944; }
-  button.copy:hover { background: #333944; }
-  button.copy.done { background: #14351f; color: #4ade80; border-color: #1c4a2c; }
-  table { width: 100%; border-collapse: collapse; font-size: 13px; }
-  th, td {
-    text-align: left;
-    padding: 6px 8px;
-    border-bottom: 1px solid #22262f;
-    white-space: nowrap;
-  }
-  th { color: #9fd3ff; font-weight: 600; }
-  .addr-cell { display: flex; align-items: center; }
-  .ok { color: #4ade80; }
-  .bad { color: #f87171; }
-  .pos { color: #4ade80; }
-  .neg { color: #f87171; }
-  .muted { color: #666; }
-  .stat-row { display: flex; gap: 24px; flex-wrap: wrap; margin-bottom: 12px; }
-  .stat { }
-  .stat .label { font-size: 11px; color: #888; text-transform: none; }
-  .stat .value { font-size: 18px; font-family: ui-monospace, Consolas, monospace; }
-  .bar-wrap { display: flex; align-items: center; gap: 8px; }
-  .bar-track { flex: 1; background: #0f1115; border-radius: 3px; height: 8px; min-width: 60px; overflow: hidden; }
-  .bar-fill { background: #2b6cb0; height: 100%; }
-  .hint { color: #888; font-size: 12px; margin-bottom: 8px; }
-  .banner { padding: 10px 14px; border-radius: 6px; font-size: 13px; margin-bottom: 16px; }
-  .banner.warn { background: #2a2110; border: 1px solid #4a3b14; color: #fbbf24; }
-</style>
+<script src="../shared.js"></script>
 </head>
 <body>
 
-<div class="topnav">
-  <a href="#" id="navHome">Home</a>
-  <a href="#" id="navAdmin">Admin</a>
-  <a href="#" id="navSelfservice">Self-Service</a>
-  <a href="#" id="navTransactions" class="active">Transactions</a>
-  <a href="#" id="navOverview">Overview</a>
-</div>
+<div id="header-placeholder"></div>
+<script>
+  fetch("../header.html")
+    .then(r => r.text())
+    .then(html => { $("header-placeholder").outerHTML = html; initGlobal(); })
+    .catch(e => console.error("Failed to load header.html:", e));
+</script>
 
 <h1>Energy Trading — Transactions</h1>
 <div class="sub">
   Last settlement, per-account balances, and energy exchanged between accounts. Read-only — no
   wallet needed.
-</div>
-
-<div id="missingParamsBanner" class="banner warn" style="display:none;">
-  Missing <code>oracle</code> and/or <code>market</code> URL parameter. Enter both below and
-  click "Load" — there are no built-in defaults, this page only works with an explicit deployment.
-</div>
-
-<div class="panel">
-  <h2>Deployment</h2>
-  <div class="config-grid">
-    <label>OracleStorage</label>
-    <input type="text" id="cfgOracle" placeholder="0x...">
-
-    <label>P2PEnergyMarket</label>
-    <input type="text" id="cfgMarket" placeholder="0x...">
-
-    <label>Stablecoin</label>
-    <input type="text" id="cfgStablecoin" readonly placeholder="(auto, via market.stablecoin())">
-  </div>
-  <button onclick="loadConfig()">Load</button>
-  <div id="cfgStatus" class="muted" style="margin-top:6px; font-size:12px;"></div>
 </div>
 
 <div class="panel">
@@ -170,134 +69,14 @@
 </div>
 
 <script>
-const RPC_URL = "https://ethereum-sepolia-rpc.publicnode.com";
+// initGlobal() is called once the shared header (with its nav/config/wallet
+// elements) has been fetched and injected — see the header-placeholder
+// script above. Calling it any earlier would leave setupNav() and friends
+// unable to find those elements.
+window.addEventListener('marketConfigLoaded', refreshAll);
+
 const DAY_SECONDS = 86400;
-
-const MARKET_ABI = [
-  {"inputs":[],"name":"getAllHouseholds","outputs":[{"internalType":"address[]","name":"","type":"address[]"}],"stateMutability":"view","type":"function"},
-  {"inputs":[],"name":"getAllProducers","outputs":[{"internalType":"address[]","name":"","type":"address[]"}],"stateMutability":"view","type":"function"},
-  {"inputs":[],"name":"stablecoin","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},
-  {"inputs":[],"name":"lastSettledSlot","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
-  {"anonymous":false,"inputs":[
-    {"indexed":true,"internalType":"address","name":"producer","type":"address"},
-    {"indexed":true,"internalType":"address","name":"consumer","type":"address"},
-    {"indexed":false,"internalType":"uint256","name":"energyWh","type":"uint256"},
-    {"indexed":false,"internalType":"uint256","name":"amountPaid","type":"uint256"},
-    {"indexed":false,"internalType":"uint256","name":"slot","type":"uint256"}
-  ],"name":"EnergyTraded","type":"event"},
-  {"anonymous":false,"inputs":[
-    {"indexed":true,"internalType":"uint256","name":"slot","type":"uint256"},
-    {"indexed":false,"internalType":"uint256","name":"totalEnergyTraded","type":"uint256"},
-    {"indexed":false,"internalType":"uint256","name":"totalPaid","type":"uint256"}
-  ],"name":"SlotSettled","type":"event"}
-];
-
-const ERC20_ABI = [
-  {"inputs":[{"internalType":"address","name":"account","type":"address"}],"name":"balanceOf","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
-  {"inputs":[],"name":"decimals","outputs":[{"internalType":"uint8","name":"","type":"uint8"}],"stateMutability":"view","type":"function"},
-  {"inputs":[],"name":"symbol","outputs":[{"internalType":"string","name":"","type":"string"}],"stateMutability":"view","type":"function"},
-  {"anonymous":false,"inputs":[
-    {"indexed":true,"internalType":"address","name":"from","type":"address"},
-    {"indexed":true,"internalType":"address","name":"to","type":"address"},
-    {"indexed":false,"internalType":"uint256","name":"value","type":"uint256"}
-  ],"name":"Transfer","type":"event"}
-];
-
-const $ = id => document.getElementById(id);
-const short = a => a ? a.slice(0,6) + "…" + a.slice(-4) : "-";
-
-let cfg = { oracle: "", market: "", stablecoin: "" };
-let readWeb3;
 const blockTimestampCache = {};
-
-function readParamFromUrl(name) {
-  try {
-    const v = new URLSearchParams(window.location.search).get(name);
-    return v ? v.trim() : null;
-  } catch (e) { return null; }
-}
-
-function syncParamsToUrl(params) {
-  try {
-    const url = new URL(window.location.href);
-    for (const [key, value] of Object.entries(params)) {
-      if (value) url.searchParams.set(key, value);
-      else url.searchParams.delete(key);
-    }
-    history.replaceState(null, "", url.toString());
-  } catch (e) {
-    console.warn("syncParamsToUrl failed:", e.message);
-  }
-}
-
-// window.location.search can change after load (e.g. via the "Load" button,
-// which rewrites it with history.replaceState), so the href is set on click
-// using the CURRENT search string rather than a value captured once here —
-// otherwise switching views after loading a different config would silently
-// carry over stale, cached params.
-function setupNav() {
-  const navTargets = {
-    navHome: "../index.html",
-    navAdmin: "../admin/index.html",
-    navSelfservice: "../selfservice/index.html",
-    navOverview: "../overview/index.html"
-  };
-  for (const [id, path] of Object.entries(navTargets)) {
-    const link = $(id);
-    if (!link) continue;
-    link.href = path + window.location.search; // best-effort initial value (hover/open-in-new-tab)
-    link.addEventListener("click", (e) => {
-      e.preventDefault();
-      window.location.href = path + window.location.search;
-    });
-  }
-}
-
-function applyConfigToForm() {
-  $("cfgOracle").value = cfg.oracle || "";
-  $("cfgMarket").value = cfg.market || "";
-  $("cfgStablecoin").value = cfg.stablecoin || "";
-}
-
-async function loadConfig() {
-  const oracleRaw = $("cfgOracle").value.trim();
-  const marketRaw = $("cfgMarket").value.trim();
-  let oracle, market;
-  try { oracle = Web3.utils.toChecksumAddress(oracleRaw); }
-  catch (e) { $("cfgStatus").innerHTML = `<span class="bad">Invalid OracleStorage address.</span>`; return; }
-  try { market = Web3.utils.toChecksumAddress(marketRaw); }
-  catch (e) { $("cfgStatus").innerHTML = `<span class="bad">Invalid P2PEnergyMarket address.</span>`; return; }
-
-  cfg.oracle = oracle;
-  cfg.market = market;
-  syncParamsToUrl({ oracle: cfg.oracle, market: cfg.market });
-  $("missingParamsBanner").style.display = "none";
-  $("cfgStatus").textContent = "Loading…";
-
-  await fetchDerivedAddresses();
-  applyConfigToForm();
-  await refreshAll();
-}
-
-async function fetchDerivedAddresses() {
-  const marketR = new readWeb3.eth.Contract(MARKET_ABI, cfg.market);
-  try {
-    cfg.stablecoin = await marketR.methods.stablecoin().call();
-    $("cfgStatus").innerHTML = `<span class="ok">Loaded.</span>`;
-  } catch (e) {
-    cfg.stablecoin = "";
-    $("cfgStatus").innerHTML = `<span class="bad">Could not read stablecoin() from market: ${e.message}</span>`;
-  }
-}
-
-function copyAddress(addr, btn) {
-  navigator.clipboard.writeText(addr).then(() => {
-    const original = btn.textContent;
-    btn.textContent = "✓";
-    btn.classList.add("done");
-    setTimeout(() => { btn.textContent = original; btn.classList.remove("done"); }, 1200);
-  }).catch(() => { alert(addr); });
-}
 
 function addrCell(addr) {
   return `<div class="addr-cell"><span title="${addr}">${short(addr)}</span><button class="copy" onclick="copyAddress('${addr}', this)">Copy</button></div>`;
@@ -532,38 +311,6 @@ function renderFlowTable(trades, decimals, symbol) {
   }
   $("flowStatus").innerHTML = `<span class="ok">${list.length} producer/consumer pair(s), ${trades.length} trade(s) total.</span>`;
 }
-
-// ─────────────────────────────────────────────────────────────
-//  Init
-// ─────────────────────────────────────────────────────────────
-
-async function init() {
-  setupNav();
-  readWeb3 = new Web3(new Web3.providers.HttpProvider(RPC_URL));
-
-  cfg.oracle = readParamFromUrl("oracle") || "";
-  cfg.market = readParamFromUrl("market") || "";
-  applyConfigToForm();
-
-  if (!cfg.oracle || !cfg.market) {
-    $("missingParamsBanner").style.display = "block";
-    return;
-  }
-
-  try {
-    cfg.oracle = Web3.utils.toChecksumAddress(cfg.oracle);
-    cfg.market = Web3.utils.toChecksumAddress(cfg.market);
-  } catch (e) {
-    $("cfgStatus").innerHTML = `<span class="bad">Invalid address in URL params.</span>`;
-    return;
-  }
-
-  await fetchDerivedAddresses();
-  applyConfigToForm();
-  await refreshAll();
-}
-
-init();
 </script>
 
 </body>

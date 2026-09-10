@@ -77,6 +77,12 @@ class OracleWriter:
         balance_eth = self.w3.from_wei(self.w3.eth.get_balance(self.account.address), "ether")
         print(f"Sepolia ETH Balance: {balance_eth}")
 
+        # Lokal verfolgte Nonce statt vor jeder TX neu abzufragen - der oeffentliche
+        # RPC ist lastverteilt ueber mehrere Nodes, die den Mempool nicht synchron
+        # sehen ("replacement transaction underpriced" / "nonce too low" bei den
+        # vielen sequenziellen TXs pro Slot).
+        self._nonce = None
+
         # Contract laden
         with open(ABI_DIR / "OracleStorage.json") as f:
             oracle_abi = json.load(f)["abi"]
@@ -100,23 +106,33 @@ class OracleWriter:
 
     def _send_tx(self, contract_function, max_retries: int = 3):
         """Baut, signiert, sendet eine Transaktion - mit Retry und Nonce-Management."""
+        if self._nonce is None:
+            self._nonce = self.w3.eth.get_transaction_count(self.account.address, "pending")
+
         for attempt in range(max_retries):
             try:
-                nonce = self.w3.eth.get_transaction_count(self.account.address, "pending")
                 tx = contract_function.build_transaction({
                     "from": self.account.address,
-                    "nonce": nonce,
+                    "nonce": self._nonce,
                     "chainId": self.chain_id,
                     "gas": 300_000,
-                    "maxFeePerGas": self.w3.to_wei("30", "gwei"),
+                    "maxFeePerGas": self.w3.to_wei("50", "gwei"),
                     "maxPriorityFeePerGas": self.w3.to_wei("2", "gwei"),
                 })
                 signed = self.w3.eth.account.sign_transaction(tx, ORACLE_PRIVATE_KEY)
                 tx_hash = self.w3.eth.send_raw_transaction(signed.raw_transaction)
+                # 120s statt 5s: Sepolia-Blockzeit liegt bei ~12s, ein zu kurzer
+                # Timeout wertet eine bloss langsame (aber erfolgreiche) TX faelschlich
+                # als fehlgeschlagen und provoziert dadurch unnoetige Nonce-Konflikte.
                 receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)
+                self._nonce += 1
                 return receipt
             except Exception as e:
                 print(f"  TX fehlgeschlagen (Versuch {attempt+1}): {e}")
+                # Nonce neu synchronisieren, falls sie inzwischen durch einen
+                # externen Vorgang (anderes Skript/Prozess auf demselben Account)
+                # ueberholt wurde
+                self._nonce = self.w3.eth.get_transaction_count(self.account.address, "pending")
                 time.sleep(5)
         raise RuntimeError("Max retries erreicht")
 
@@ -137,7 +153,11 @@ class OracleWriter:
         """Stellt sicher, dass alle konfigurierten Haushalte im P2P Market registriert sind."""
         for h in self.config["households"]:
             addr = Web3.to_checksum_address(h["address"])
-            print(f"Registriere Haushalt {h['id']} ({addr}) ...")
+            registered = self.p2p_market.functions.isRegistered(addr).call()
+            if registered:
+                print(f"Haushalt {h['id']} ({addr}) bereits im P2P Market registriert.")
+                continue
+            print(f"Registriere Haushalt {h['id']} ({addr}) im P2P Market ...")
             self._send_tx(self.p2p_market.functions.registerHousehold(addr))
 
     # ─────────────────────────────────────────────────────────────

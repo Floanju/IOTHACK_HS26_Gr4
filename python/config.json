@@ -42,15 +42,6 @@
       "battery_capacity_kwh": 0.0,
       "battery_max_rate_kwh": 0.0,
       "base_consumption_kwh_per_hour": 1.0
-    },
-    {
-      "id": "house_05",
-      "address": "0xD35B3D1B1B514971e308cc4BE8e506CaF2a4F100",
-      "type": "consumer_only",
-      "pv_peak_kwp": 0.0,
-      "battery_capacity_kwh": 0.0,
-      "battery_max_rate_kwh": 0.0,
-      "base_consumption_kwh_per_hour": 0.2
     }
   ],
 
@@ -64,10 +55,10 @@
   "blockchain": {
     "rpc_url": "https://ethereum-sepolia-rpc.publicnode.com",
     "chain_id": 11155111,
-    "oracle_storage_address": "0x17F28525b82b703005FF4b3b67fe323e12e6196c",
-    "p2p_market_address": "0x0334329E61788F13868A81211299027E8b07186e",
-    "battery_manager_address": "0x7eB9320520E223F3FCeF6cAf63b34dBb9962D7FA",
-    "incentive_controller_address": "0xREPLACE_AFTER_DEPLOY",
+    "oracle_storage_address": "0xa241DeF207135617A7676c2556FE88D6DDF47544",
+    "p2p_market_address": "0x06bB195Bcb03d065bb1120562cfEedf52d62D2CE",
+    "battery_manager_address": "0x1Bb036717f16c7D71f37F62008B7DaE28fA36421",
+    "incentive_controller_address": "0xA496AD56263b26AA01BA4f91236537feB206362D",
     "stablecoin_address": "0x4BaBBaE33998fEd65Ada53bc41CeAa3Cde7F7B46"
   }
 }

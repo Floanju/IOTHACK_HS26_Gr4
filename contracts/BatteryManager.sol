@@ -100,18 +100,113 @@ contract BatteryManager is IBatteryManager {
         require(isManaged[household], "Not managed");
 
         // TODO: Implementierung durch Team
-        //
-        // IOracleStorage.BatteryState memory bs = oracle.getLatestBatteryState(household);
-        // IOracleStorage.MeterReading memory mr = oracle.getLatestMeterReading(household);
-        // IOracleStorage.WeatherData memory wd = oracle.getLatestWeather();
-        //
-        // ... eure Logik hier ...
-        //
-        // lastDecision[household] = Decision({...});
-        // emit DecisionMade(household, action, amount, slot, "your-reason");
-        // return (action, amount);
+        
+        /**
+         * Trifft eine Lade-/Entladeentscheidung für einen Haushalt.
+         *
+         * OPTIMIERUNGSSTRATEGIE:
+         *
+         *      Schritt 1 - Basis-Heuristik (Netto-Energie + Batteriestand):
+         *        - Überschuss (Produktion > Verbrauch) UND SoC < 90%  -> CHARGE
+         *          (Batterie hat noch Platz, überschüssige PV-Energie wird
+         *          gespeichert statt sofort ins P2P-Netz verkauft zu werden)
+         *        - Defizit (Verbrauch > Produktion) UND SoC > 20%     -> DISCHARGE
+         *          (Bedarf wird aus der eigenen Batterie gedeckt statt am
+         *          P2P-Markt zuzukaufen)
+         *        - Sonst (kein klarer Überschuss/Defizit ODER SoC-Grenze
+         *          erreicht)                                           -> IDLE
+         *        Die 90%/20%-Grenzen sind bewusst gesetzte Sicherheitspuffer,
+         *        keine 0%/100%-Vollausnutzung, um die Batterie zu schonen.
+         *
+         *      Schritt 2 - Wetter-Korrektur (überschreibt Schritt 1 in zwei Fällen):
+         *        - Hohe Bewölkung (cloudCover > 80%) verhindert CHARGE, selbst
+         *          bei aktuellem Überschuss: bei trübem Ausblick ist die Batterie
+         *          eher komplett voll, wenn wenig PV zu erwarten ist -> nicht
+         *          sinnvoll, jetzt noch mehr reinzuladen.
+         *        - Hohe Bewölkung erzwingt zusätzlich DISCHARGE (falls SoC > 20%),
+         *          auch wenn kein akutes Defizit besteht: vorsorglich entladen,
+         *          weil für die nächsten Slots weniger PV-Nachschub erwartet wird.
+         *
+         *      Mengenbegrenzung (unabhängig von der Aktion): der Betrag wird immer
+         *      auf das Minimum aus maxRateWh (physisches Rate-Limit der Batterie),
+         *      verfügbarem Headroom (beim Laden) bzw. verfügbarer Ladung (beim
+         *      Entladen) gedeckelt - nie mehr, als die Batterie tatsächlich
+         *      aufnehmen/liefern kann.
+         *
+         *      Priorisierung it. Aufgabenstellung: PV-Eigenverbrauch > Batterie
+         *      laden > Netzeinspeisung. Das "PV-Eigenverbrauch" ist implizit bereits
+         *      im netto-Wert enthalten (production - consumption kommt vom Meter,
+         *      Eigenverbrauch ist also schon abgezogen, bevor wir hier überhaupt
+         *      rechnen) - "Netzeinspeisung" ist der Fall, wenn CHARGE nicht greift
+         *      (Batterie voll/cloudy) und der Überschuss stattdessen unverändert
+         *      im P2P-Markt landet (siehe P2PEnergyMarket.settleSlot()).
+         */
 
-        revert("Not implemented yet - this is your job!");
+        IOracleStorage.BatteryState memory bs = oracle.getLatestBatteryState(household);
+        IOracleStorage.MeterReading memory mr = oracle.getLatestMeterReading(household);
+        IOracleStorage.WeatherData memory wd = oracle.getLatestWeather();
+
+        int256 netto = int256(mr.productionWh) - int256(mr.consumptionWh);
+        bool cloudy = wd.cloudCover > 80;
+
+        // Basis-Heuristik
+        Action action;
+        if (netto > 0 && bs.socPercent < 90) {
+            action = Action.CHARGE;
+        } else if (netto < 0 && bs.socPercent > 20) {
+            action = Action.DISCHARGE;
+        } else {
+            action = Action.IDLE;
+        }
+
+        // Wetter-Korrektur (kann die Basis-Heuristik überschreiben)
+        string memory reason;
+        if (action == Action.CHARGE && cloudy) {
+            action = Action.IDLE;
+            reason = "cloudy-outlook-skip-charge";
+        } else if (action == Action.IDLE && cloudy && bs.socPercent > 20) {
+            action = Action.DISCHARGE;
+            reason = "cloudy-outlook-preemptive-discharge";
+        } else if (action == Action.CHARGE) {
+            reason = "surplus-charge";
+        } else if (action == Action.DISCHARGE) {
+            reason = "deficit-discharge";
+        } else {
+            reason = "no-action-needed";
+        }
+
+        // Mengenbegrenzung
+        uint256 amount;
+        if (action == Action.CHARGE) {
+            uint256 surplus = uint256(netto);
+            uint256 headroomWh = ((100 - bs.socPercent) * bs.capacityWh) / 100;
+            amount = surplus;
+            if (amount > bs.maxRateWh) amount = bs.maxRateWh;
+            if (amount > headroomWh) amount = headroomWh;
+
+        } else if (action == Action.DISCHARGE) {
+            uint256 deficit = netto < 0 ? uint256(-netto) : 0;
+            uint256 availableWh = (bs.socPercent * bs.capacityWh) / 100;
+            amount = deficit > 0 ? deficit : bs.maxRateWh; // reiner Wetter-Trigger ohne Defizit: Standard-Rate nutzen
+            if (amount > bs.maxRateWh) amount = bs.maxRateWh;
+            if (amount > availableWh) amount = availableWh;
+
+        } else {
+            amount = 0;
+        }
+
+        uint256 slot = oracle.getCurrentSlot();
+
+        lastDecision[household] = Decision({
+            action: action,
+            amountWh: amount,
+            slot: slot,
+            timestamp: block.timestamp
+        });
+
+        emit DecisionMade(household, action, amount, slot, reason);
+
+        return (action, amount);
     }
 
     // ─────────────────────────────────────────────────────────────

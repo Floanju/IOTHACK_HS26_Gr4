@@ -209,7 +209,7 @@
 </nav>
 
 <section id="sec-households" class="panel">
-  <h2>Households <span class="muted" style="font-weight:400; font-size:12px;">— known list ∪ market.getAllHouseholds()</span></h2>
+  <h2>Households <span class="muted" style="font-weight:400; font-size:12px;">— known list ∪ market.getAllHouseholds() ∪ market.getAllProducers() (grid operator)</span></h2>
 
   <div class="date-range">
     <label>From <input type="datetime-local" id="meterFrom"></label>
@@ -223,10 +223,11 @@
   <table id="householdsTable">
     <thead>
       <tr>
-        <th>ID</th><th>Address</th>
+        <th>ID</th><th>Address</th><th>Type</th>
         <th>Oracle reg.</th><th>Market reg.</th>
         <th>Consumption (Wh)</th><th>Production (Wh)</th><th>Meter time</th>
         <th>SoC %</th><th>Capacity (Wh)</th>
+        <th>Buy price /kWh</th><th>Sell price /kWh</th>
       </tr>
     </thead>
     <tbody></tbody>
@@ -399,6 +400,10 @@ const MARKET_ABI = [
   {"inputs":[],"name":"getHouseholdCount","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
   {"inputs":[],"name":"getAllHouseholds","outputs":[{"internalType":"address[]","name":"","type":"address[]"}],"stateMutability":"view","type":"function"},
   {"inputs":[{"internalType":"address","name":"","type":"address"}],"name":"isRegistered","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"householdToProducerPrice","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"producerToHouseholdPrice","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"getAllProducers","outputs":[{"internalType":"address[]","name":"","type":"address[]"}],"stateMutability":"view","type":"function"},
+  {"inputs":[{"internalType":"address","name":"","type":"address"}],"name":"isRegisteredProducer","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"view","type":"function"},
   {"inputs":[],"name":"settleSlot","outputs":[],"stateMutability":"nonpayable","type":"function"}
 ];
 
@@ -709,7 +714,8 @@ async function refresh() {
     const [
       oOwner, currentSlot, startTs, slotDuration, weather,
       mOwner, mStablecoin, mOracle, price, lastSettled,
-      battMgr, incCtrl, hhCount, allHouseholds
+      battMgr, incCtrl, hhCount, allHouseholds,
+      gridBuyPrice, gridSellPrice, allProducers
     ] = await Promise.all([
       oracle.methods.owner().call(),
       oracle.methods.getCurrentSlot().call(),
@@ -724,7 +730,10 @@ async function refresh() {
       market.methods.batteryManager().call(),
       market.methods.incentiveController().call(),
       market.methods.getHouseholdCount().call(),
-      market.methods.getAllHouseholds().call()
+      market.methods.getAllHouseholds().call(),
+      market.methods.householdToProducerPrice().call(),
+      market.methods.producerToHouseholdPrice().call(),
+      market.methods.getAllProducers().call()
     ]);
 
     currentStartTimestamp = Number(startTs);
@@ -749,7 +758,9 @@ async function refresh() {
     kvAddrRow(marketKv, "Owner", mOwner);
     kvAddrRow(marketKv, "Stablecoin", mStablecoin, "ok");
     kvAddrRow(marketKv, "Oracle", mOracle, mOracle.toLowerCase() === cfg.oracle.toLowerCase() ? "ok" : "bad");
-    kvRow(marketKv, "Price / kWh", wei6(price) + " token (" + price + " units)");
+    kvRow(marketKv, "Price / kWh (household ↔ household)", wei6(price) + " token (" + price + " units)");
+    kvRow(marketKv, "Grid buy price / kWh (household → grid)", wei6(gridBuyPrice) + " token (" + gridBuyPrice + " units)");
+    kvRow(marketKv, "Grid sell price / kWh (grid → household)", wei6(gridSellPrice) + " token (" + gridSellPrice + " units)");
     kvRow(marketKv, "Last settled slot", lastSettled);
 
     // A manual BatteryManager/IncentiveController override (Advanced section)
@@ -778,7 +789,9 @@ async function refresh() {
     // OracleStorage has no enumeration function, so union market.getAllHouseholds()
     // with the manually maintained known-households list (also catches households
     // that report meter data but aren't market-registered yet).
-    await loadHouseholds(oracle, market, cfg.households, allHouseholds);
+    await loadHouseholds(oracle, market, cfg.households, allHouseholds, allProducers, {
+      p2pPrice: price, gridBuyPrice, gridSellPrice
+    });
     await loadMeterHistory();
     await loadWeatherHistory();
     await loadBatteryManager(web3, oracle, effectiveBattery, cfg.households, allHouseholds);
@@ -821,49 +834,76 @@ function renderHouseholdStats(activeHouseholds, avgConsumption, avgProduction) {
     tile("Avg. net / reading", `${net >= 0 ? "+" : ""}${net} Wh`, net >= 0 ? "ok" : "bad");
 }
 
-async function loadHouseholds(oracle, market, knownHouseholds, onChainAddresses) {
+// onChainProducers = market.getAllProducers() (e.g. the grid operator, registered
+// via registerProducer() rather than registerHousehold()) — shown in the same
+// table as households, but with grid buy/sell price instead of the P2P price
+// and without meter/battery data (producers don't report to the oracle).
+async function loadHouseholds(oracle, market, knownHouseholds, onChainAddresses, onChainProducers, prices) {
   const tbody = document.querySelector("#householdsTable tbody");
   tbody.innerHTML = "";
 
   const households = mergeHouseholds(knownHouseholds, onChainAddresses);
   currentHouseholds = households;
 
-  if (households.length === 0) {
+  const householdAddrs = new Set(households.map(h => h.address.toLowerCase()));
+  const producers = mergeHouseholds(knownHouseholds, onChainProducers)
+    .filter(p => !householdAddrs.has(p.address.toLowerCase()));
+
+  const allRows = [
+    ...households.map(h => ({ ...h, type: "household" })),
+    ...producers.map(p => ({ ...p, type: "producer" }))
+  ];
+
+  if (allRows.length === 0) {
     $("householdStats").innerHTML = "";
-    $("householdsStatus").innerHTML = `<span class="muted">No households known — neither in the list nor registered in the market.</span>`;
+    $("householdsStatus").innerHTML = `<span class="muted">No households or producers known — neither in the list nor registered in the market.</span>`;
     return;
   }
 
-  $("householdsStatus").textContent = `Loading ${households.length} household(s)…`;
+  $("householdsStatus").textContent = `Loading ${allRows.length} entr${allRows.length === 1 ? "y" : "ies"}…`;
 
   try {
-    const rows = await Promise.all(households.map(async (h) => {
+    const rows = await Promise.all(allRows.map(async (h) => {
+      const isProducer = h.type === "producer";
       const [oracleReg, marketReg, meter, batt] = await Promise.all([
         oracle.methods.isHouseholdRegistered(h.address).call(),
-        market.methods.isRegistered(h.address).call(),
+        isProducer
+          ? market.methods.isRegisteredProducer(h.address).call()
+          : market.methods.isRegistered(h.address).call(),
         oracle.methods.getLatestMeterReading(h.address).call(),
         oracle.methods.getLatestBatteryState(h.address).call()
       ]);
-      return { ...h, oracleReg, marketReg, meter, batt };
+      const buyPrice = isProducer ? prices.gridBuyPrice : prices.p2pPrice;
+      const sellPrice = isProducer ? prices.gridSellPrice : prices.p2pPrice;
+      return { ...h, oracleReg, marketReg, meter, batt, buyPrice, sellPrice };
     }));
 
     for (const r of rows) {
+      const isProducer = r.type === "producer";
+      const dash = '<span class="muted">-</span>';
       const tr = document.createElement("tr");
       tr.innerHTML = `
         <td>${r.id}</td>
         <td>${addrCell(r.address)}</td>
+        <td>${isProducer ? '<span class="badge idle">Grid operator</span>' : "Household"}</td>
         <td class="${r.oracleReg ? "ok" : "bad"}">${r.oracleReg ? "✓" : "✗"}</td>
         <td class="${r.marketReg ? "ok" : "bad"}">${r.marketReg ? "✓" : "✗"}</td>
-        <td>${r.meter.consumptionWh}</td>
-        <td>${r.meter.productionWh}</td>
-        <td>${fmtTs(r.meter.timestamp)}</td>
-        <td>${r.batt.capacityWh > 0 ? r.batt.socPercent + "%" : "-"}</td>
-        <td>${r.batt.capacityWh > 0 ? r.batt.capacityWh : "-"}</td>
+        <td>${isProducer ? dash : r.meter.consumptionWh}</td>
+        <td>${isProducer ? dash : r.meter.productionWh}</td>
+        <td>${isProducer ? dash : fmtTs(r.meter.timestamp)}</td>
+        <td>${!isProducer && r.batt.capacityWh > 0 ? r.batt.socPercent + "%" : "-"}</td>
+        <td>${!isProducer && r.batt.capacityWh > 0 ? r.batt.capacityWh : "-"}</td>
+        <td>${wei6(r.buyPrice)}</td>
+        <td>${wei6(r.sellPrice)}</td>
       `;
       tbody.appendChild(tr);
     }
 
-    $("householdsStatus").innerHTML = `<span class="ok">${rows.length} household(s) loaded (${rows.filter(r=>r.marketReg).length} registered in the market).</span>`;
+    const householdCount = rows.filter(r => r.type === "household").length;
+    const producerCount = rows.filter(r => r.type === "producer").length;
+    $("householdsStatus").innerHTML = `<span class="ok">${householdCount} household(s)` +
+      (producerCount > 0 ? ` + ${producerCount} grid operator/producer(s)` : "") +
+      ` loaded (${rows.filter(r => r.marketReg).length} registered in the market).</span>`;
   } catch (e) {
     console.error(e);
     $("householdsStatus").innerHTML = `<span class="bad">Error loading household data: ${e.message}</span>`;

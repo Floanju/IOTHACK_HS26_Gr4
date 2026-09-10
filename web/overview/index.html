@@ -126,8 +126,11 @@
     font-weight: 600;
     letter-spacing: 0.02em;
   }
-  .badge.charge { background: rgba(74, 222, 128, 0.15); color: #4ade80; }
-  .badge.discharge { background: rgba(251, 191, 36, 0.15); color: #fbbf24; }
+  /* Charge/discharge use blue/orange (not red/green) so the meaning stays
+     distinguishable for the most common forms of color vision deficiency;
+     see CHART_COLORS below for the single source of truth used by the charts. */
+  .badge.charge { background: rgba(96, 165, 250, 0.15); color: #60a5fa; }
+  .badge.discharge { background: rgba(251, 146, 60, 0.15); color: #fb923c; }
   .badge.idle { background: rgba(154, 160, 171, 0.15); color: #9aa0ab; }
 
   .chart-card { margin-bottom: 12px; }
@@ -439,9 +442,29 @@ const INCENTIVE_ABI = [
 
 const ACTION_NAMES = ["IDLE", "CHARGE", "DISCHARGE"];
 const ACTION_CLASS = ["idle", "charge", "discharge"];
+
+// Chart colors, chosen to stay distinguishable for the common forms of color
+// vision deficiency (red-green in particular, by far the most common one):
+// every two-series chart on this page pairs blue with orange rather than
+// green with red. "Up"/"rising"/"charging" is always blue, "down"/"falling"/
+// "discharging" is always orange, so the meaning stays consistent across the
+// meter, weather and battery charts. Neutral/unrelated series (temperature,
+// SoC flat, idle) get separate hues (amber, violet, gray) so nothing collides.
+const CHART_COLORS = {
+  production: "#60a5fa",    // blue
+  consumption: "#fb923c",   // orange
+  irradiance: "#fbbf24",    // amber (paired with blue temperature — already CVD-safe)
+  temperature: "#60a5fa",   // blue
+  socRising: "#60a5fa",     // blue
+  socFalling: "#fb923c",    // orange
+  socFlat: "#a78bfa",       // violet — neither blue nor orange, so "no change" can't be mistaken for either
+  charge: "#60a5fa",        // blue — matches socRising
+  discharge: "#fb923c",     // orange — matches socFalling
+  idle: "#9aa0ab"           // gray
+};
 // Background shading behind the SoC chart, keyed by action index (1=CHARGE, 2=DISCHARGE).
 // IDLE (0) has no entry, so it's left unshaded.
-const ACTION_BAND_COLOR = { 1: "rgba(74, 222, 128, 0.16)", 2: "rgba(248, 113, 113, 0.16)" };
+const ACTION_BAND_COLOR = { 1: "rgba(96, 165, 250, 0.16)", 2: "rgba(251, 146, 60, 0.16)" };
 
 const $ = id => document.getElementById(id);
 const short = a => a ? a.slice(0,6) + "…" + a.slice(-4) : "-";
@@ -1065,8 +1088,8 @@ function buildMeterCard(id) {
   const legend = document.createElement("div");
   legend.className = "chart-legend";
   legend.innerHTML = `
-    <span><span class="dot" style="background:#f87171"></span>Consumption (Wh)</span>
-    <span><span class="dot" style="background:#4ade80"></span>Production (Wh)</span>
+    <span><span class="dot" style="background:${CHART_COLORS.consumption}"></span>Consumption (Wh, dashed)</span>
+    <span><span class="dot" style="background:${CHART_COLORS.production}"></span>Production (Wh)</span>
   `;
   card.appendChild(legend);
 
@@ -1111,8 +1134,8 @@ async function loadWeatherHistory() {
       return;
     }
 
-    drawWeatherChart(irradianceSvg, enriched, "irradiance", "#fbbf24", " W/m²", true, "Irradiance");
-    drawWeatherChart(temperatureSvg, enriched, "temperatureC", "#60a5fa", " °C", false, "Temperature", 1);
+    drawWeatherChart(irradianceSvg, enriched, "irradiance", CHART_COLORS.irradiance, " W/m²", true, "Irradiance");
+    drawWeatherChart(temperatureSvg, enriched, "temperatureC", CHART_COLORS.temperature, " °C", false, "Temperature", 1);
 
     statusEl.innerHTML = `<span class="ok">${enriched.length} event(s) loaded (${new Date(fromTs * 1000).toLocaleString()} – ${new Date(toTs * 1000).toLocaleString()}, from block ${fromBlock}).</span>`;
 
@@ -1258,13 +1281,18 @@ function initChart(svg, tMin, tMax, minVal, maxVal, bands) {
   return { xScale, yScale, yBounds: [padTop, height - padBottom], box };
 }
 
-function drawLineSeries(svg, segments, xScale, yScale, yBounds, key, color) {
+// `dash` (optional) adds a stroke-dasharray so a series stays distinguishable
+// by shape, not just color — belt-and-braces for viewers who can't rely on
+// hue at all (e.g. full color blindness), on top of the CVD-safe palette.
+function drawLineSeries(svg, segments, xScale, yScale, yBounds, key, color, dash) {
   for (const seg of segments) {
     const pts = seg.map(e => ({ x: xScale(e.timestamp), y: yScale(e[key]) }));
-    svg.appendChild(svgEl("path", {
+    const attrs = {
       d: smoothPathD(pts, yBounds), fill: "none", stroke: color,
       "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round"
-    }));
+    };
+    if (dash) attrs["stroke-dasharray"] = dash;
+    svg.appendChild(svgEl("path", attrs));
   }
 }
 
@@ -1275,11 +1303,11 @@ function drawMeterChart(svg, events) {
   const { xScale, yScale, yBounds, box } = initChart(svg, tMin, tMax, 0, maxVal);
   const segments = splitContiguous(events);
 
-  drawLineSeries(svg, segments, xScale, yScale, yBounds, "productionWh", "#4ade80");
-  drawLineSeries(svg, segments, xScale, yScale, yBounds, "consumptionWh", "#f87171");
+  drawLineSeries(svg, segments, xScale, yScale, yBounds, "productionWh", CHART_COLORS.production);
+  drawLineSeries(svg, segments, xScale, yScale, yBounds, "consumptionWh", CHART_COLORS.consumption, "6,3");
   attachHoverTooltip(svg, xScale, yScale, box, events, [
-    { key: "productionWh", color: "#4ade80", label: "Production", unit: " Wh" },
-    { key: "consumptionWh", color: "#f87171", label: "Consumption", unit: " Wh" }
+    { key: "productionWh", color: CHART_COLORS.production, label: "Production", unit: " Wh" },
+    { key: "consumptionWh", color: CHART_COLORS.consumption, label: "Consumption", unit: " Wh" }
   ]);
 }
 
@@ -1527,8 +1555,8 @@ function buildSocCard(id) {
   const legend = document.createElement("div");
   legend.className = "chart-legend";
   legend.innerHTML = `
-    <span><span class="dot" style="background:#4ade80"></span>Charging</span>
-    <span><span class="dot" style="background:#f87171"></span>Discharging</span>
+    <span><span class="dot" style="background:${CHART_COLORS.charge}"></span>Charging / SoC rising</span>
+    <span><span class="dot" style="background:${CHART_COLORS.discharge}"></span>Discharging / SoC falling (dashed)</span>
   `;
   card.appendChild(legend);
 
@@ -1551,15 +1579,35 @@ function buildActionBands(actionEvents, tMin, tMax) {
   return bands;
 }
 
+// Straight (unsmoothed) per-pair segments, colored by direction, rather than
+// one smoothed multi-color path — lets each point-to-point move show its own
+// rising/falling color instead of averaging it away. Falling segments are
+// also dashed, so direction doesn't depend on color perception alone.
+function drawSocLine(svg, segments, xScale, yScale) {
+  for (const seg of segments) {
+    for (let i = 0; i < seg.length - 1; i++) {
+      const a = seg[i], b = seg[i + 1];
+      const rising = b.soc > a.soc, falling = b.soc < a.soc;
+      const color = rising ? CHART_COLORS.socRising : falling ? CHART_COLORS.socFalling : CHART_COLORS.socFlat;
+      const attrs = {
+        d: `M${xScale(a.timestamp).toFixed(1)},${yScale(a.soc).toFixed(1)} L${xScale(b.timestamp).toFixed(1)},${yScale(b.soc).toFixed(1)}`,
+        fill: "none", stroke: color, "stroke-width": 2, "stroke-linecap": "round", "stroke-linejoin": "round"
+      };
+      if (falling) attrs["stroke-dasharray"] = "6,3";
+      svg.appendChild(svgEl("path", attrs));
+    }
+  }
+}
+
 function drawSocChart(svg, events, actionEvents) {
   const tMin = events[0].timestamp, tMax = events[events.length - 1].timestamp;
   const bands = buildActionBands(actionEvents, tMin, tMax);
-  const { xScale, yScale, yBounds, box } = initChart(svg, tMin, tMax, 0, 100, bands);
+  const { xScale, yScale, box } = initChart(svg, tMin, tMax, 0, 100, bands);
   const segments = splitContiguous(events);
 
-  drawLineSeries(svg, segments, xScale, yScale, yBounds, "soc", "#a78bfa");
+  drawSocLine(svg, segments, xScale, yScale);
   attachHoverTooltip(svg, xScale, yScale, box, events, [
-    { key: "soc", color: "#a78bfa", label: "SoC", unit: "%" }
+    { key: "soc", color: CHART_COLORS.socFlat, label: "SoC", unit: "%" }
   ]);
 }
 

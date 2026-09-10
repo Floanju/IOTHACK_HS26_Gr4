@@ -630,6 +630,15 @@
       overflow-y: hidden;
   }
 
+  /* Used where we deliberately don't want horizontal scrolling: instead of a
+     scrollbar, older points are trimmed and the chart is anchored to the
+     right so the most recent data stays visible. */
+  .chart-fixed {
+      overflow: hidden;
+      display: flex;
+      justify-content: flex-end;
+  }
+
   .chart-legend {
       display: flex;
       gap: 16px;

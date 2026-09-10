@@ -492,11 +492,25 @@ function renderBatteryCharts(households, batteryByHousehold) {
       <h3 title="${addr}">${short(addr)}</h3>
       <div class="chart-meta">Currently <span class="batt-state ${state.cls}" style="display:inline;">${state.label}</span> — ${last.soc}% · ${points.length} reading(s), slot ${points[0].slot} → ${last.slot}</div>
     `;
-    const scrollWrap = document.createElement("div");
-    scrollWrap.className = "chart-scroll";
-    scrollWrap.appendChild(buildBatterySvg(points));
-    card.appendChild(scrollWrap);
-    container.appendChild(card);
+    const chartWrap = document.createElement("div");
+    chartWrap.className = "chart-fixed";
+    card.appendChild(chartWrap);
+    container.appendChild(card); // attach first so its width can be measured
+
+    // No horizontal scrolling here: if there isn't room for every reading,
+    // just show the most recent ones (right-anchored) instead of a scrollbar.
+    const availableWidth = Math.max(chartWrap.clientWidth || card.clientWidth || 260, 120);
+    const maxPoints = Math.max(2, Math.floor(availableWidth / BATT_POINT_SLOT));
+    const visiblePoints = points.length > maxPoints ? points.slice(points.length - maxPoints) : points;
+
+    chartWrap.appendChild(buildBatterySvg(visiblePoints));
+    if (visiblePoints.length < points.length) {
+      const note = document.createElement("div");
+      note.className = "muted";
+      note.style.cssText = "font-size:10px; margin-top:4px;";
+      note.textContent = `Showing the most recent ${visiblePoints.length} of ${points.length} readings.`;
+      card.appendChild(note);
+    }
   }
 
   $("battStatus").innerHTML = anyData

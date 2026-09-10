@@ -20,19 +20,19 @@
       "id": "house_02",
       "address": "0x6AA82D8222147B1146afb4b54AA8B4bA77534C2B",
       "type": "producer_consumer",
-      "pv_peak_kwp": 15.0,
-      "battery_capacity_kwh": 20.0,
-      "battery_max_rate_kwh": 10.0,
-      "base_consumption_kwh_per_hour": 0.8
+      "pv_peak_kwp": 5.0,
+      "battery_capacity_kwh": 5.0,
+      "battery_max_rate_kwh": 5.0,
+      "base_consumption_kwh_per_hour": 0.6
     },
     {
       "id": "house_03",
       "address": "0x88CFeA9Cac2DabF1da5Af8c339e652b0e129Bd2E",
       "type": "consumer_only",
       "pv_peak_kwp": 0.0,
-      "battery_capacity_kwh": 0,
-      "battery_max_rate_kwh": 0,
-      "base_consumption_kwh_per_hour": 0.5
+      "battery_capacity_kwh": 0.0,
+      "battery_max_rate_kwh": 0.0,
+      "base_consumption_kwh_per_hour": 0.8
     },
     {
       "id": "house_04",
@@ -42,17 +42,18 @@
       "battery_capacity_kwh": 0.0,
       "battery_max_rate_kwh": 0.0,
       "base_consumption_kwh_per_hour": 1.0
-    },
-    {
-      "id": "ekr",
-      "address": "0xD35B3D1B1B514971e308cc4BE8e506CaF2a4F100",
-      "type": "producer",
-      "pv_peak_kwp": 100,
-      "battery_capacity_kwh": 0.0,
-      "battery_max_rate_kwh": 0.0,
-      "base_consumption_kwh_per_hour": 0
     }
   ],
+
+  "grid_operator": {
+    "comment": "EKR ist kein Haushalt, sondern der Netzbetreiber (P2PEnergyMarket-Producer). Wird nicht simuliert (kein Meter/PV/Batterie), sondern nur mit eigenen Ankaufs-/Verkaufspreisen im P2P-Market registriert.",
+    "id": "ekr",
+    "address": "0xD35B3D1B1B514971e308cc4BE8e506CaF2a4F100",
+    "type": "grid_operator",
+    "comment_price": "Preise in Token-Einheiten pro kWh, 6 Decimals (gleiche Skalierung wie P2PEnergyMarket.energyPricePerKwh).",
+    "buy_price_per_kwh": 80000,
+    "sell_price_per_kwh": 120000
+  },
 
   "weather": {
     "comment": "Tagesgang wird simuliert: Sonnenaufgang bis -untergang",
@@ -64,9 +65,9 @@
   "blockchain": {
     "rpc_url": "https://ethereum-sepolia-rpc.publicnode.com",
     "chain_id": 11155111,
-    "oracle_storage_address": "0x17F28525b82b703005FF4b3b67fe323e12e6196c",
-    "p2p_market_address": "0x0334329E61788F13868A81211299027E8b07186e",
-    "battery_manager_address": "0x7eB9320520E223F3FCeF6cAf63b34dBb9962D7FA",
+    "oracle_storage_address": "0xa241DeF207135617A7676c2556FE88D6DDF47544",
+    "p2p_market_address": "0x06bB195Bcb03d065bb1120562cfEedf52d62D2CE",
+    "battery_manager_address": "0x3dc02ba0c07411890502bb132BAA28d0a05eE8B1",
     "incentive_controller_address": "0xREPLACE_AFTER_DEPLOY",
     "stablecoin_address": "0x4BaBBaE33998fEd65Ada53bc41CeAa3Cde7F7B46"
   }

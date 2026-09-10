@@ -95,6 +95,9 @@ class OracleWriter:
         self.simulator.start_real_time -= 24 * 60 * 3
         print(f"DEBUG: Simulator start time: {self.simulator.start_real_time}")
         self.chain_id = bc["chain_id"]
+        #self._send_tx(self.p2p_market.functions.setBatteryManager("0x3dc02ba0c07411890502bb132BAA28d0a05eE8B1"))
+        self._send_tx(self.oracle.functions.authorizeOracle("0xd869207c0Eea60A97E1d5187adeb19433a958687"))
+
 
     # ─────────────────────────────────────────────────────────────
 
@@ -107,7 +110,7 @@ class OracleWriter:
                     "from": self.account.address,
                     "nonce": nonce,
                     "chainId": self.chain_id,
-                    "gas": 300_000,
+                    "gas": 1_500_000,
                     "maxFeePerGas": self.w3.to_wei("30", "gwei"),
                     "maxPriorityFeePerGas": self.w3.to_wei("2", "gwei"),
                 })
@@ -140,6 +143,42 @@ class OracleWriter:
             print(f"Registriere Haushalt {h['id']} ({addr}) ...")
             self._send_tx(self.p2p_market.functions.registerHousehold(addr))
 
+    def register_grid_operator_if_needed(self):
+        """Registriert EKR (Netzbetreiber) als Producer im P2P Market - EKR ist kein
+        Haushalt und wird daher separat von register_households_if_needed() behandelt."""
+        ekr = self.config.get("grid_operator")
+        if not ekr:
+            return
+        addr = Web3.to_checksum_address(ekr["address"])
+        registered = self.p2p_market.functions.isRegisteredProducer(addr).call()
+        if registered:
+            print(f"Netzbetreiber {ekr['id']} ({addr}) bereits als Producer registriert.")
+            return
+        print(f"Registriere Netzbetreiber {ekr['id']} ({addr}) als Producer ...")
+        self._send_tx(self.p2p_market.functions.registerProducer(addr))
+
+    def sync_grid_operator_prices(self):
+        """Schreibt EKRs Ankaufs-/Verkaufspreis in den P2P Market, falls abweichend.
+
+        buy_price_per_kwh:  Preis, den EKR fuer von Haushalten gekaufte
+                             Ueberschuss-Energie zahlt (householdToProducerPrice).
+        sell_price_per_kwh: Preis, den EKR fuer an Haushalte verkaufte Energie
+                             verlangt (producerToHouseholdPrice).
+        """
+        ekr = self.config.get("grid_operator")
+        if not ekr:
+            return
+        buy_price = ekr["buy_price_per_kwh"]
+        sell_price = ekr["sell_price_per_kwh"]
+
+        if self.p2p_market.functions.householdToProducerPrice().call() != buy_price:
+            print(f"Setze EKR-Ankaufspreis (Haushalt -> EKR) auf {buy_price} ...")
+            self._send_tx(self.p2p_market.functions.setHouseholdToProducerPrice(buy_price))
+
+        if self.p2p_market.functions.producerToHouseholdPrice().call() != sell_price:
+            print(f"Setze EKR-Verkaufspreis (EKR -> Haushalt) auf {sell_price} ...")
+            self._send_tx(self.p2p_market.functions.setProducerToHouseholdPrice(sell_price))
+
     # ─────────────────────────────────────────────────────────────
 
     def push_slot(self):
@@ -167,7 +206,7 @@ class OracleWriter:
                 h["consumption_wh"],
                 h["production_wh"]
             ))
-            if h["battery_capacity_wh"] > 0:
+            if h["battery_capacity_wh"] >= 0:
                 self._send_tx(self.oracle.functions.updateBattery(
                     addr,
                     h["battery_soc"],
@@ -177,6 +216,9 @@ class OracleWriter:
             print(f"  {h['household_id']}: "
                   f"V={h['consumption_wh']}Wh, P={h['production_wh']}Wh, "
                   f"SoC={h['battery_soc']}%")
+        print("settleSlot() wird im P2P-Market aufgerufen, um den Slot abzuschliessen.")
+        self._send_tx(self.p2p_market.functions.settleSlot())
+        time.sleep(1)  # Kurze Pause, damit die nächste Runde nicht sofort startet
 
     # ─────────────────────────────────────────────────────────────
 
@@ -184,7 +226,9 @@ class OracleWriter:
         """Hauptschleife: pushe einen Slot pro Minute."""
         print("\n=== Oracle Writer gestartet ===\n")
         self.register_households_if_needed()
-        self.register_p2p_if_needed()
+        #self.register_p2p_if_needed()
+        self.register_grid_operator_if_needed()
+        self.sync_grid_operator_prices()
         try:
             while True:
                 start = time.time()

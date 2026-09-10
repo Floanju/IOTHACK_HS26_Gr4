@@ -1,0 +1,1505 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Energy Trading — Overview</title>
+<script src="https://cdn.jsdelivr.net/npm/web3@1.10.4/dist/web3.min.js"></script>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, Segoe UI, Roboto, sans-serif;
+    background: #0f1115;
+    color: #e6e6e6;
+    margin: 0;
+    padding: 24px;
+  }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h2 { font-size: 15px; margin: 0 0 10px; color: #9fd3ff; }
+  .sub { color: #888; font-size: 13px; margin-bottom: 16px; }
+  .topnav { display: flex; gap: 4px; margin-bottom: 18px; border-bottom: 1px solid #22262f; padding-bottom: 12px; }
+  .topnav a {
+    color: #9fd3ff; text-decoration: none; font-size: 13px;
+    padding: 6px 12px; border-radius: 6px; background: #171a21; border: 1px solid #2a2e38;
+  }
+  .topnav a.active { background: #2b6cb0; color: #fff; border-color: #2b6cb0; }
+  .topnav a:hover:not(.active) { background: #1c2028; }
+  .subnav { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 16px; }
+  .subnav a {
+    color: #9fd3ff; text-decoration: none; font-size: 12px;
+    padding: 5px 12px; border-radius: 999px; background: #171a21; border: 1px solid #2a2e38;
+  }
+  .subnav a:hover { border-color: #3a7fca; }
+  .panel {
+    background: #171a21;
+    border: 1px solid #2a2e38;
+    border-radius: 8px;
+    padding: 16px 18px;
+    margin-bottom: 16px;
+  }
+  section[id], details[id] { scroll-margin-top: 16px; }
+  details.panel > summary { font-size: 15px; color: #9fd3ff; cursor: pointer; list-style: none; }
+  details.panel > summary::-webkit-details-marker { display: none; }
+  details.panel > summary:before { content: "▸ "; color: #666; }
+  details.panel[open] > summary:before { content: "▾ "; }
+  details.panel[open] > summary { margin-bottom: 10px; }
+  .config-grid {
+    display: grid;
+    grid-template-columns: 160px 1fr;
+    gap: 8px 12px;
+    align-items: center;
+  }
+  .config-grid label { font-size: 12px; color: #aaa; }
+  input[type=text], input[type=datetime-local], textarea {
+    width: 100%;
+    background: #0f1115;
+    border: 1px solid #333944;
+    color: #e6e6e6;
+    border-radius: 4px;
+    padding: 6px 8px;
+    font-family: ui-monospace, Consolas, monospace;
+    font-size: 12px;
+    color-scheme: dark;
+  }
+  textarea { min-height: 80px; resize: vertical; }
+  input[readonly] { color: #999; background: #14161b; }
+  button {
+    background: #2b6cb0;
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    padding: 8px 16px;
+    font-size: 13px;
+    cursor: pointer;
+    margin-top: 10px;
+    margin-right: 8px;
+  }
+  button:hover { background: #3a7fca; }
+  button:disabled { background: #333944; cursor: not-allowed; }
+  button.secondary { background: #333944; }
+  button.secondary:hover { background: #444b58; }
+  button.copy { background: #262b35; padding: 2px 6px; font-size: 11px; margin: 0 0 0 6px; border: 1px solid #333944; }
+  button.copy:hover { background: #333944; }
+  button.copy.done { background: #14351f; color: #4ade80; border-color: #1c4a2c; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td {
+    text-align: left;
+    padding: 6px 8px;
+    border-bottom: 1px solid #22262f;
+    white-space: nowrap;
+  }
+  th { color: #9fd3ff; font-weight: 600; }
+  .addr-cell { display: flex; align-items: center; }
+  .kv { display: grid; grid-template-columns: 220px 1fr; gap: 4px 12px; font-size: 13px; }
+  .kv div.k { color: #9fd3ff; }
+  .kv div.v { font-family: ui-monospace, Consolas, monospace; word-break: break-all; display: flex; align-items: center; }
+  .ok { color: #4ade80; }
+  .bad { color: #f87171; }
+  .muted { color: #666; }
+  .warn { color: #fbbf24; }
+  .hint { color: #888; font-size: 12px; margin-bottom: 8px; }
+  .banner { padding: 10px 14px; border-radius: 6px; font-size: 13px; margin-bottom: 16px; }
+  .banner.warn { background: #2a2110; border: 1px solid #4a3b14; color: #fbbf24; }
+
+  .date-range {
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    background: #0f1115;
+    border: 1px solid #2a2e38;
+    border-radius: 8px;
+    padding: 10px 16px;
+    margin-bottom: 12px;
+  }
+  .date-range label { display: flex; align-items: center; gap: 8px; font-size: 12px; color: #aaa; }
+  .date-range input[type=datetime-local] { width: auto; }
+  .date-range button { margin: 0; }
+
+  .stat-row { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+  .stat-tile { flex: 1 1 130px; background: #0f1115; border: 1px solid #2a2e38; border-radius: 6px; padding: 10px 12px; }
+  .stat-tile .label { font-size: 11px; color: #888; }
+  .stat-tile .value { font-size: 20px; font-weight: 600; margin-top: 2px; }
+
+  .badge {
+    display: inline-block;
+    padding: 1px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+  }
+  .badge.charge { background: rgba(74, 222, 128, 0.15); color: #4ade80; }
+  .badge.discharge { background: rgba(251, 191, 36, 0.15); color: #fbbf24; }
+  .badge.idle { background: rgba(154, 160, 171, 0.15); color: #9aa0ab; }
+
+  .chart-card { margin-bottom: 12px; }
+  .chart-card summary { font-size: 13px; color: #e6e6e6; cursor: pointer; list-style: none; }
+  .chart-card summary::-webkit-details-marker { display: none; }
+  .chart-card summary:before { content: "▾ "; color: #666; }
+  #batteryChartWrap { overflow-x: auto; margin-top: 10px; }
+  #batteryChart { display: block; }
+  .chart-legend { display: flex; gap: 16px; font-size: 12px; color: #aaa; margin-top: 6px; flex-wrap: wrap; }
+  .chart-legend span.dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 4px; vertical-align: middle; }
+
+  html { scroll-behavior: smooth; }
+  .market-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 900px) { .market-grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+
+<div class="topnav">
+  <a href="#" id="navHome">Home</a>
+  <a href="#" id="navAdmin">Admin</a>
+  <a href="#" id="navSelfservice">Self-Service</a>
+  <a href="#" id="navTransactions">Transactions</a>
+  <a href="#" id="navOverview" class="active">Overview</a>
+</div>
+
+<h1>Energy Trading — Overview</h1>
+<div class="sub">
+  Read-only view across OracleStorage, P2PEnergyMarket, BatteryManager and IncentiveController —
+  no wallet needed. <span id="statusInline" class="muted"></span>
+</div>
+
+<div id="missingParamsBanner" class="banner warn" style="display:none;">
+  Missing <code>oracle</code> and/or <code>market</code> URL parameter. Enter both below and
+  click "Load" — there are no built-in defaults, this page only works with an explicit deployment.
+</div>
+
+<div class="panel">
+  <h2>Deployment</h2>
+  <div class="config-grid">
+    <label>OracleStorage</label>
+    <input type="text" id="cfgOracle" placeholder="0x...">
+
+    <label>P2PEnergyMarket</label>
+    <input type="text" id="cfgMarket" placeholder="0x...">
+
+    <label>Stablecoin</label>
+    <input type="text" id="cfgStablecoin" readonly placeholder="(auto, via market.stablecoin())">
+  </div>
+  <button onclick="loadConfig()">Load</button>
+  <button class="secondary" onclick="refresh()">Refresh</button>
+  <div id="cfgStatus" class="muted" style="margin-top:6px; font-size:12px;"></div>
+</div>
+
+<nav class="subnav">
+  <a href="#sec-households">Households</a>
+  <a href="#sec-meter">Consumption &amp; production</a>
+  <a href="#sec-weather">Weather</a>
+  <a href="#sec-battery">Battery</a>
+  <a href="#sec-incentive">Incentive</a>
+  <a href="#sec-market">Market &amp; Oracle</a>
+  <a href="#sec-advanced">Advanced</a>
+</nav>
+
+<section id="sec-households" class="panel">
+  <h2>Households <span class="muted" style="font-weight:400; font-size:12px;">— known list ∪ market.getAllHouseholds()</span></h2>
+
+  <div class="date-range">
+    <label>From <input type="datetime-local" id="meterFrom"></label>
+    <label>To <input type="datetime-local" id="meterTo"></label>
+    <button onclick="applySelectedRange()">Apply</button>
+    <button class="secondary" onclick="setMeterRangePreset(24)">Last 24h</button>
+    <button class="secondary" onclick="setMeterRangePreset(24 * 7)">Last 7 days</button>
+  </div>
+
+  <div class="stat-row" id="householdStats"></div>
+  <table id="householdsTable">
+    <thead>
+      <tr>
+        <th>ID</th><th>Address</th>
+        <th>Oracle reg.</th><th>Market reg.</th>
+        <th>Consumption (Wh)</th><th>Production (Wh)</th><th>Meter time</th>
+        <th>SoC %</th><th>Capacity (Wh)</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+  <div id="householdsStatus" class="muted" style="margin-top:8px"></div>
+</section>
+
+<section id="sec-meter" class="panel">
+  <h2>Consumption &amp; production <span class="muted" style="font-weight:400; font-size:12px;">— per household, from OracleStorage.MeterUpdated events; range set above</span></h2>
+  <div id="meterHistoryStatus" class="muted" style="margin-bottom:8px"></div>
+  <div id="meterCharts"></div>
+</section>
+
+<section id="sec-weather" class="panel">
+  <h2>Weather <span class="muted" style="font-weight:400; font-size:12px;">— irradiance &amp; temperature, from OracleStorage.WeatherUpdated events; range set above</span></h2>
+
+  <div class="stat-row" id="weatherStats"></div>
+  <div id="weatherHistoryStatus" class="muted" style="margin-bottom:8px"></div>
+
+  <h2 style="font-size:13px; margin-top:4px;">Irradiance (W/m²)</h2>
+  <svg id="weatherIrradianceChart" style="width:100%; height:200px; display:block;"></svg>
+
+  <h2 style="font-size:13px; margin-top:16px;">Temperature (°C)</h2>
+  <svg id="weatherTemperatureChart" style="width:100%; height:200px; display:block;"></svg>
+</section>
+
+<section id="sec-battery" class="panel">
+  <h2>BatteryManager <span class="muted" style="font-weight:400; font-size:12px;">— phase 2, battery charge cycles</span></h2>
+  <div class="kv" id="batteryKv"></div>
+  <div id="batteryStatus" class="muted" style="margin-top:8px"></div>
+
+  <table id="batteryTable" style="margin-top:12px;">
+    <thead>
+      <tr>
+        <th>ID</th><th>Address</th><th>Managed?</th>
+        <th>Last action</th><th>Amount (Wh)</th><th>Slot</th><th>Time</th><th>SoC % (current)</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <h2 style="margin-top:20px">History <span class="muted" style="font-weight:400; font-size:12px;">— DecisionMade events (charge/discharge cycles over time)</span></h2>
+  <button onclick="loadBatteryEvents()">Load / refresh events</button>
+  <div id="batteryEventsStatus" class="muted" style="margin-top:8px"></div>
+
+  <div id="batteryChartWrap">
+    <svg id="batteryChart" width="100%" height="160"></svg>
+  </div>
+  <div class="chart-legend">
+    <span><span class="dot" style="background:#4ade80"></span>Charge</span>
+    <span><span class="dot" style="background:#fbbf24"></span>Discharge</span>
+    <span><span class="dot" style="background:#9aa0ab"></span>Idle</span>
+  </div>
+
+  <table id="batteryEventsTable" style="margin-top:14px;">
+    <thead>
+      <tr>
+        <th>Time</th><th>Household</th><th>Action</th><th>Amount (Wh)</th><th>Slot</th><th>Reason</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+</section>
+
+<section id="sec-incentive" class="panel">
+  <h2>IncentiveController <span class="muted" style="font-weight:400; font-size:12px;">— phase 3, reputation &amp; price discount</span></h2>
+  <div class="kv" id="incentiveKv"></div>
+  <div id="incentiveStatus" class="muted" style="margin-top:8px"></div>
+
+  <table id="incentiveTable" style="margin-top:12px;">
+    <thead>
+      <tr>
+        <th>ID</th><th>Address</th><th>Reputation score</th><th>Price factor</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <h2 style="margin-top:20px">History <span class="muted" style="font-weight:400; font-size:12px;">— ScoreUpdated events</span></h2>
+  <button onclick="loadIncentiveEvents()">Load / refresh events</button>
+  <div id="incentiveEventsStatus" class="muted" style="margin-top:8px"></div>
+
+  <table id="incentiveEventsTable" style="margin-top:14px;">
+    <thead>
+      <tr>
+        <th>Time</th><th>Household</th><th>New score</th><th>Deviation (‰)</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+</section>
+
+<details id="sec-market" class="panel" open>
+  <summary>Market &amp; Oracle <span class="muted" style="font-weight:400; font-size:12px;">— technical contract details</span></summary>
+  <div class="market-grid">
+    <div>
+      <h2>OracleStorage</h2>
+      <div class="kv" id="oracleKv"></div>
+      <h2 style="margin-top:16px">Weather (latest slot)</h2>
+      <div class="kv" id="weatherKv"></div>
+    </div>
+    <div>
+      <h2>P2PEnergyMarket</h2>
+      <div class="kv" id="marketKv"></div>
+      <button onclick="testSettleSlot()">Simulate settleSlot() (call, no tx)</button>
+      <div id="settleResult" class="muted" style="margin-top:8px"></div>
+    </div>
+  </div>
+</details>
+
+<details id="sec-advanced" class="panel">
+  <summary>Advanced <span class="muted" style="font-weight:400; font-size:12px;">— overrides &amp; known households</span></summary>
+  <div class="hint">
+    BatteryManager and IncentiveController are normally read straight off the market contract
+    (<code>batteryManager()</code> / <code>incentiveController()</code>). Overrides here are only
+    useful if you want to inspect one before it's linked via <code>setBatteryManager()</code> /
+    <code>setIncentiveController()</code>. OracleStorage has no enumeration function, so a
+    household that only reports meter data but isn't market-registered yet can only be found
+    through the list below — it's automatically unioned with <code>market.getAllHouseholds()</code>.
+  </div>
+  <div class="config-grid">
+    <label>BatteryManager override</label>
+    <input type="text" id="cfgBatteryOverride" placeholder="blank = auto, via market.batteryManager()">
+
+    <label>IncentiveController override</label>
+    <input type="text" id="cfgIncentiveOverride" placeholder="blank = auto, via market.incentiveController()">
+
+    <label>Known households (JSON)</label>
+    <textarea id="cfgHouseholds" spellcheck="false"></textarea>
+  </div>
+  <button onclick="loadConfig()">Save &amp; refresh</button>
+</details>
+
+<script>
+const RPC_URL = "https://ethereum-sepolia-rpc.publicnode.com";
+const ZERO = "0x0000000000000000000000000000000000000000";
+
+const ORACLE_ABI = [
+  {"inputs":[{"internalType":"address","name":"household","type":"address"}],"name":"getLatestMeterReading","outputs":[{"components":[{"internalType":"uint256","name":"consumptionWh","type":"uint256"},{"internalType":"uint256","name":"productionWh","type":"uint256"},{"internalType":"uint256","name":"timestamp","type":"uint256"}],"internalType":"struct IOracleStorage.MeterReading","name":"","type":"tuple"}],"stateMutability":"view","type":"function"},
+  {"inputs":[{"internalType":"address","name":"household","type":"address"}],"name":"getLatestBatteryState","outputs":[{"components":[{"internalType":"uint256","name":"socPercent","type":"uint256"},{"internalType":"uint256","name":"capacityWh","type":"uint256"},{"internalType":"uint256","name":"maxRateWh","type":"uint256"},{"internalType":"uint256","name":"timestamp","type":"uint256"}],"internalType":"struct IOracleStorage.BatteryState","name":"","type":"tuple"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"getLatestWeather","outputs":[{"components":[{"internalType":"uint256","name":"irradianceWm2","type":"uint256"},{"internalType":"int256","name":"temperatureC","type":"int256"},{"internalType":"uint256","name":"cloudCover","type":"uint256"},{"internalType":"uint256","name":"timestamp","type":"uint256"}],"internalType":"struct IOracleStorage.WeatherData","name":"","type":"tuple"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"getCurrentSlot","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[{"internalType":"address","name":"household","type":"address"}],"name":"isHouseholdRegistered","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"owner","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"startTimestamp","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"SLOT_DURATION","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[{"internalType":"address","name":"","type":"address"}],"name":"authorizedOracles","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"view","type":"function"},
+  {"anonymous":false,"inputs":[
+    {"indexed":true,"internalType":"address","name":"household","type":"address"},
+    {"indexed":false,"internalType":"uint256","name":"slot","type":"uint256"},
+    {"indexed":false,"internalType":"uint256","name":"consumption","type":"uint256"},
+    {"indexed":false,"internalType":"uint256","name":"production","type":"uint256"}
+  ],"name":"MeterUpdated","type":"event"},
+  {"anonymous":false,"inputs":[
+    {"indexed":false,"internalType":"uint256","name":"slot","type":"uint256"},
+    {"indexed":false,"internalType":"uint256","name":"irradiance","type":"uint256"},
+    {"indexed":false,"internalType":"int256","name":"temperature","type":"int256"}
+  ],"name":"WeatherUpdated","type":"event"}
+];
+
+const MARKET_ABI = [
+  {"inputs":[],"name":"owner","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"stablecoin","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"oracle","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"energyPricePerKwh","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"lastSettledSlot","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"batteryManager","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"incentiveController","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"getHouseholdCount","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"getAllHouseholds","outputs":[{"internalType":"address[]","name":"","type":"address[]"}],"stateMutability":"view","type":"function"},
+  {"inputs":[{"internalType":"address","name":"","type":"address"}],"name":"isRegistered","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"settleSlot","outputs":[],"stateMutability":"nonpayable","type":"function"}
+];
+
+// Phase 2: BatteryManager. Decision struct order must exactly match BatteryManager.sol:
+// (action, amountWh, slot, timestamp).
+const BATTERY_ABI = [
+  {"inputs":[],"name":"owner","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"oracle","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},
+  {"inputs":[{"internalType":"address","name":"","type":"address"}],"name":"isManaged","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"getManagedHouseholds","outputs":[{"internalType":"address[]","name":"","type":"address[]"}],"stateMutability":"view","type":"function"},
+  {"inputs":[{"internalType":"address","name":"household","type":"address"}],"name":"getLastDecision","outputs":[{"components":[{"internalType":"enum IBatteryManager.Action","name":"action","type":"uint8"},{"internalType":"uint256","name":"amountWh","type":"uint256"},{"internalType":"uint256","name":"slot","type":"uint256"},{"internalType":"uint256","name":"timestamp","type":"uint256"}],"internalType":"struct BatteryManager.Decision","name":"","type":"tuple"}],"stateMutability":"view","type":"function"},
+  {"anonymous":false,"inputs":[
+    {"indexed":true,"internalType":"address","name":"household","type":"address"},
+    {"indexed":false,"internalType":"enum IBatteryManager.Action","name":"action","type":"uint8"},
+    {"indexed":false,"internalType":"uint256","name":"amountWh","type":"uint256"},
+    {"indexed":false,"internalType":"uint256","name":"slot","type":"uint256"},
+    {"indexed":false,"internalType":"string","name":"reason","type":"string"}
+  ],"name":"DecisionMade","type":"event"}
+];
+
+// Phase 3: IncentiveController (see IncentiveController.sol / IIncentiveController.sol —
+// not part of the uploaded contract set, ABI kept as previously used).
+const INCENTIVE_ABI = [
+  {"inputs":[],"name":"owner","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},
+  {"inputs":[{"internalType":"address","name":"household","type":"address"}],"name":"getReputationScore","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[{"internalType":"address","name":"household","type":"address"}],"name":"getPriceMultiplier","outputs":[{"internalType":"uint256","name":"multiplier","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"anonymous":false,"inputs":[
+    {"indexed":true,"internalType":"address","name":"household","type":"address"},
+    {"indexed":false,"internalType":"uint256","name":"newScore","type":"uint256"},
+    {"indexed":false,"internalType":"uint256","name":"deviation","type":"uint256"}
+  ],"name":"ScoreUpdated","type":"event"}
+];
+
+const ACTION_NAMES = ["IDLE", "CHARGE", "DISCHARGE"];
+const ACTION_CLASS = ["idle", "charge", "discharge"];
+
+const $ = id => document.getElementById(id);
+const short = a => a ? a.slice(0,6) + "…" + a.slice(-4) : "-";
+const fmtTs = ts => Number(ts) === 0 ? "-" : new Date(Number(ts) * 1000).toLocaleString();
+const wei6 = v => (Number(v) / 1e6).toFixed(6);
+
+const SVG_NS = "http://www.w3.org/2000/svg";
+function svgEl(tag, attrs) {
+  const el = document.createElementNS(SVG_NS, tag);
+  for (const k in attrs) el.setAttribute(k, attrs[k]);
+  return el;
+}
+
+function copyAddress(addr, btn) {
+  navigator.clipboard.writeText(addr).then(() => {
+    const original = btn.textContent;
+    btn.textContent = "✓";
+    btn.classList.add("done");
+    setTimeout(() => { btn.textContent = original; btn.classList.remove("done"); }, 1200);
+  }).catch(() => { alert(addr); });
+}
+
+function addrCell(addr, id) {
+  const label = id ? id : short(addr);
+  return `<div class="addr-cell"><span title="${addr}">${label}</span><button class="copy" onclick="copyAddress('${addr}', this)">Copy</button></div>`;
+}
+
+function kvRow(container, key, value, cls) {
+  const k = document.createElement("div"); k.className = "k"; k.textContent = key;
+  const v = document.createElement("div"); v.className = "v" + (cls ? " " + cls : ""); v.textContent = value;
+  container.appendChild(k); container.appendChild(v);
+}
+
+function kvAddrRow(container, key, addr, cls) {
+  const k = document.createElement("div"); k.className = "k"; k.textContent = key;
+  const v = document.createElement("div"); v.className = "v" + (cls ? " " + cls : "");
+  const span = document.createElement("span"); span.textContent = addr;
+  const btn = document.createElement("button");
+  btn.className = "copy"; btn.textContent = "Copy";
+  btn.onclick = () => copyAddress(addr, btn);
+  v.appendChild(span); v.appendChild(btn);
+  container.appendChild(k); container.appendChild(v);
+}
+
+// ─────────────────────────────────────────────────────────────
+//  URL params — oracle/market are required, no hardcoded defaults.
+//  battery/incentive overrides and the known-households list are optional
+//  and, if present, are also round-tripped through the URL so the page
+//  stays fully reproducible from a link, same as elsewhere on this site.
+// ─────────────────────────────────────────────────────────────
+
+let cfg = { oracle: "", market: "", stablecoin: "", batteryOverride: "", incentiveOverride: "", households: [] };
+let effectiveBattery = "", effectiveIncentive = "";
+let readWeb3;
+
+// Shared connection/household state so buttons like loadBatteryEvents() don't
+// need to reparse config / reconnect every time.
+let oracleContract = null;
+let marketContract = null;
+let currentHouseholds = [];
+let batteryContract = null;
+let currentBatteryHouseholds = [];
+let incentiveContract = null;
+let currentStartTimestamp = 0;
+let currentSlotDuration = 60;
+
+function readParamFromUrl(name) {
+  try {
+    const v = new URLSearchParams(window.location.search).get(name);
+    return v ? v.trim() : null;
+  } catch (e) { return null; }
+}
+
+function syncParamsToUrl(params) {
+  try {
+    const url = new URL(window.location.href);
+    for (const [key, value] of Object.entries(params)) {
+      if (value) url.searchParams.set(key, value);
+      else url.searchParams.delete(key);
+    }
+    history.replaceState(null, "", url.toString());
+  } catch (e) {
+    console.warn("syncParamsToUrl failed:", e.message);
+  }
+}
+
+function setupNav() {
+  const qs = window.location.search;
+  $("navHome").href = "../index.html" + qs;
+  $("navAdmin").href = "../admin/index.html" + qs;
+  $("navSelfservice").href = "../selfservice/index.html" + qs;
+  $("navTransactions").href = "../transactions/index.html" + qs;
+}
+
+function applyConfigToForm() {
+  $("cfgOracle").value = cfg.oracle || "";
+  $("cfgMarket").value = cfg.market || "";
+  $("cfgStablecoin").value = cfg.stablecoin || "";
+  $("cfgBatteryOverride").value = cfg.batteryOverride || "";
+  $("cfgIncentiveOverride").value = cfg.incentiveOverride || "";
+  $("cfgHouseholds").value = JSON.stringify(cfg.households || [], null, 2);
+}
+
+function readAdvancedFromForm() {
+  cfg.batteryOverride = $("cfgBatteryOverride").value.trim();
+  cfg.incentiveOverride = $("cfgIncentiveOverride").value.trim();
+  cfg.households = JSON.parse($("cfgHouseholds").value || "[]");
+}
+
+async function loadConfig() {
+  const oracleRaw = $("cfgOracle").value.trim();
+  const marketRaw = $("cfgMarket").value.trim();
+  let oracle, market;
+  try { oracle = Web3.utils.toChecksumAddress(oracleRaw); }
+  catch (e) { $("cfgStatus").innerHTML = `<span class="bad">Invalid OracleStorage address.</span>`; return; }
+  try { market = Web3.utils.toChecksumAddress(marketRaw); }
+  catch (e) { $("cfgStatus").innerHTML = `<span class="bad">Invalid P2PEnergyMarket address.</span>`; return; }
+
+  cfg.oracle = oracle;
+  cfg.market = market;
+  try {
+    readAdvancedFromForm();
+  } catch (e) {
+    $("cfgStatus").innerHTML = `<span class="bad">Invalid JSON in "Known households": ${e.message}</span>`;
+    return;
+  }
+
+  syncParamsToUrl({
+    oracle: cfg.oracle,
+    market: cfg.market,
+    battery: cfg.batteryOverride,
+    incentive: cfg.incentiveOverride,
+    households: cfg.households.length ? JSON.stringify(cfg.households) : ""
+  });
+  $("missingParamsBanner").style.display = "none";
+  $("cfgStatus").textContent = "Loading…";
+
+  await refresh();
+}
+
+async function fetchDerivedAddresses() {
+  const marketR = new readWeb3.eth.Contract(MARKET_ABI, cfg.market);
+  try {
+    cfg.stablecoin = await marketR.methods.stablecoin().call();
+  } catch (e) {
+    cfg.stablecoin = "";
+    $("cfgStatus").innerHTML = `<span class="bad">Could not read stablecoin() from market: ${e.message}</span>`;
+    throw e;
+  }
+  applyConfigToForm();
+}
+
+// ─────────────────────────────────────────────────────────────
+//  Main refresh
+// ─────────────────────────────────────────────────────────────
+
+async function refresh() {
+  if (!cfg.oracle || !cfg.market) return;
+  $("cfgStatus").textContent = "Loading…";
+  $("statusInline").textContent = "";
+  $("householdsStatus").textContent = "";
+  $("batteryStatus").textContent = "";
+
+  const web3 = new Web3(new Web3.providers.HttpProvider(RPC_URL));
+  readWeb3 = web3;
+  const oracle = new web3.eth.Contract(ORACLE_ABI, cfg.oracle);
+  const market = new web3.eth.Contract(MARKET_ABI, cfg.market);
+  oracleContract = oracle;
+  marketContract = market;
+
+  try {
+    await fetchDerivedAddresses();
+
+    const [
+      oOwner, currentSlot, startTs, slotDuration, weather,
+      mOwner, mStablecoin, mOracle, price, lastSettled,
+      battMgr, incCtrl, hhCount, allHouseholds
+    ] = await Promise.all([
+      oracle.methods.owner().call(),
+      oracle.methods.getCurrentSlot().call(),
+      oracle.methods.startTimestamp().call(),
+      oracle.methods.SLOT_DURATION().call(),
+      oracle.methods.getLatestWeather().call(),
+      market.methods.owner().call(),
+      market.methods.stablecoin().call(),
+      market.methods.oracle().call(),
+      market.methods.energyPricePerKwh().call(),
+      market.methods.lastSettledSlot().call(),
+      market.methods.batteryManager().call(),
+      market.methods.incentiveController().call(),
+      market.methods.getHouseholdCount().call(),
+      market.methods.getAllHouseholds().call()
+    ]);
+
+    currentStartTimestamp = Number(startTs);
+    currentSlotDuration = Number(slotDuration);
+
+    const oracleKv = $("oracleKv"); oracleKv.innerHTML = "";
+    kvAddrRow(oracleKv, "Address", cfg.oracle);
+    kvAddrRow(oracleKv, "Owner", oOwner);
+    kvRow(oracleKv, "Current slot", currentSlot);
+    kvRow(oracleKv, "Start", fmtTs(startTs));
+    kvRow(oracleKv, "Slot duration", slotDuration + "s");
+
+    const weatherKv = $("weatherKv"); weatherKv.innerHTML = "";
+    kvRow(weatherKv, "Irradiance", weather.irradianceWm2 + " W/m²");
+    kvRow(weatherKv, "Temperature", (Number(weather.temperatureC) / 10).toFixed(1) + " °C");
+    kvRow(weatherKv, "Cloud cover", weather.cloudCover + " %");
+    kvRow(weatherKv, "Time", fmtTs(weather.timestamp));
+    renderWeatherStats(weather);
+
+    const marketKv = $("marketKv"); marketKv.innerHTML = "";
+    kvAddrRow(marketKv, "Address", cfg.market);
+    kvAddrRow(marketKv, "Owner", mOwner);
+    kvAddrRow(marketKv, "Stablecoin", mStablecoin, "ok");
+    kvAddrRow(marketKv, "Oracle", mOracle, mOracle.toLowerCase() === cfg.oracle.toLowerCase() ? "ok" : "bad");
+    kvRow(marketKv, "Price / kWh", wei6(price) + " token (" + price + " units)");
+    kvRow(marketKv, "Last settled slot", lastSettled);
+
+    // A manual BatteryManager/IncentiveController override (Advanced section)
+    // wins over the on-chain value from the market — useful while it hasn't
+    // been linked via setBatteryManager()/setIncentiveController() yet.
+    effectiveBattery = cfg.batteryOverride || battMgr;
+    const battLabel = cfg.batteryOverride ? "BatteryManager (override)" : "BatteryManager";
+    if (effectiveBattery === ZERO || !effectiveBattery) {
+      kvRow(marketKv, battLabel, "— not set (phase 2)", "muted");
+    } else {
+      kvAddrRow(marketKv, battLabel, effectiveBattery, "ok");
+    }
+
+    effectiveIncentive = cfg.incentiveOverride || incCtrl;
+    const incLabel = cfg.incentiveOverride ? "IncentiveController (override)" : "IncentiveController";
+    if (effectiveIncentive === ZERO || !effectiveIncentive) {
+      kvRow(marketKv, incLabel, "— not set (phase 3)", "muted");
+    } else {
+      kvAddrRow(marketKv, incLabel, effectiveIncentive, "ok");
+    }
+    kvRow(marketKv, "Registered households", hhCount);
+
+    $("cfgStatus").innerHTML = `<span class="ok">Loaded.</span>`;
+    $("statusInline").innerHTML = `Updated ${new Date().toLocaleTimeString()}`;
+
+    // OracleStorage has no enumeration function, so union market.getAllHouseholds()
+    // with the manually maintained known-households list (also catches households
+    // that report meter data but aren't market-registered yet).
+    await loadHouseholds(oracle, market, cfg.households, allHouseholds);
+    await loadMeterHistory();
+    await loadWeatherHistory();
+    await loadBatteryManager(web3, oracle, effectiveBattery, cfg.households, allHouseholds);
+    await loadIncentiveController(web3, effectiveIncentive, currentHouseholds);
+
+  } catch (e) {
+    console.error(e);
+    $("cfgStatus").innerHTML = `<span class="bad">Error loading: ${e.message}</span>`;
+  }
+}
+
+function mergeHouseholds(known, onChain) {
+  const byAddress = new Map();
+  (known || []).forEach(h => {
+    if (h && h.address) byAddress.set(h.address.toLowerCase(), { id: h.id || short(h.address), address: h.address });
+  });
+  (onChain || []).forEach(addr => {
+    const key = addr.toLowerCase();
+    if (!byAddress.has(key)) byAddress.set(key, { id: short(addr), address: addr });
+  });
+  return Array.from(byAddress.values());
+}
+
+const addressIdMap = households => new Map(households.map(h => [h.address.toLowerCase(), h.id]));
+
+// Shows the average per reading, not the sum: 1 slot = 15 simulated minutes but
+// only ~1 real minute, so summing over "last 24h" of real time would add up
+// ~15 simulated days of energy. The average stays independent of how many
+// readings fall in the selected range.
+function renderHouseholdStats(activeHouseholds, avgConsumption, avgProduction) {
+  const statsEl = $("householdStats");
+  if (activeHouseholds === 0) { statsEl.innerHTML = ""; return; }
+
+  const net = avgProduction - avgConsumption;
+  const tile = (label, value, cls) => `<div class="stat-tile"><div class="label">${label}</div><div class="value ${cls || ""}">${value}</div></div>`;
+  statsEl.innerHTML =
+    tile("Active households", activeHouseholds) +
+    tile("Avg. consumption / reading", `${avgConsumption} Wh`) +
+    tile("Avg. production / reading", `${avgProduction} Wh`) +
+    tile("Avg. net / reading", `${net >= 0 ? "+" : ""}${net} Wh`, net >= 0 ? "ok" : "bad");
+}
+
+async function loadHouseholds(oracle, market, knownHouseholds, onChainAddresses) {
+  const tbody = document.querySelector("#householdsTable tbody");
+  tbody.innerHTML = "";
+
+  const households = mergeHouseholds(knownHouseholds, onChainAddresses);
+  currentHouseholds = households;
+
+  if (households.length === 0) {
+    $("householdStats").innerHTML = "";
+    $("householdsStatus").innerHTML = `<span class="muted">No households known — neither in the list nor registered in the market.</span>`;
+    return;
+  }
+
+  $("householdsStatus").textContent = `Loading ${households.length} household(s)…`;
+
+  try {
+    const rows = await Promise.all(households.map(async (h) => {
+      const [oracleReg, marketReg, meter, batt] = await Promise.all([
+        oracle.methods.isHouseholdRegistered(h.address).call(),
+        market.methods.isRegistered(h.address).call(),
+        oracle.methods.getLatestMeterReading(h.address).call(),
+        oracle.methods.getLatestBatteryState(h.address).call()
+      ]);
+      return { ...h, oracleReg, marketReg, meter, batt };
+    }));
+
+    for (const r of rows) {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${r.id}</td>
+        <td>${addrCell(r.address)}</td>
+        <td class="${r.oracleReg ? "ok" : "bad"}">${r.oracleReg ? "✓" : "✗"}</td>
+        <td class="${r.marketReg ? "ok" : "bad"}">${r.marketReg ? "✓" : "✗"}</td>
+        <td>${r.meter.consumptionWh}</td>
+        <td>${r.meter.productionWh}</td>
+        <td>${fmtTs(r.meter.timestamp)}</td>
+        <td>${r.batt.capacityWh > 0 ? r.batt.socPercent + "%" : "-"}</td>
+        <td>${r.batt.capacityWh > 0 ? r.batt.capacityWh : "-"}</td>
+      `;
+      tbody.appendChild(tr);
+    }
+
+    $("householdsStatus").innerHTML = `<span class="ok">${rows.length} household(s) loaded (${rows.filter(r=>r.marketReg).length} registered in the market).</span>`;
+  } catch (e) {
+    console.error(e);
+    $("householdsStatus").innerHTML = `<span class="bad">Error loading household data: ${e.message}</span>`;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+//  Shared From/To range — drives overview stats + all range charts
+// ─────────────────────────────────────────────────────────────
+
+function toDatetimeLocal(date) {
+  const pad = n => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+// Only set if still empty, so a user-picked range survives "Save & refresh".
+function initMeterRangeDefaults() {
+  if ($("meterFrom").value && $("meterTo").value) return;
+  const now = new Date();
+  const from = new Date(now.getTime() - 24 * 3600 * 1000);
+  $("meterTo").value = toDatetimeLocal(now);
+  $("meterFrom").value = toDatetimeLocal(from);
+}
+
+function setMeterRangePreset(hours) {
+  const now = new Date();
+  const from = new Date(now.getTime() - hours * 3600 * 1000);
+  $("meterTo").value = toDatetimeLocal(now);
+  $("meterFrom").value = toDatetimeLocal(from);
+  applySelectedRange();
+}
+
+function applySelectedRange() {
+  loadMeterHistory();
+  loadWeatherHistory();
+}
+
+function getMeterRange() {
+  const now = Math.floor(Date.now() / 1000);
+  const fromVal = $("meterFrom").value;
+  const toVal = $("meterTo").value;
+  let fromTs = fromVal ? Math.floor(new Date(fromVal).getTime() / 1000) : now - 24 * 3600;
+  let toTs = toVal ? Math.floor(new Date(toVal).getTime() / 1000) : now;
+  if (fromTs > toTs) [fromTs, toTs] = [toTs, fromTs];
+  return { fromTs, toTs };
+}
+
+// Falls back to a smaller block range since some RPC providers cap the range per query.
+async function fetchRecentEvents(contract, eventName) {
+  const latest = Number(await readWeb3.eth.getBlockNumber());
+  let fromBlock = Math.max(0, latest - 50000);
+  try {
+    return { events: await contract.getPastEvents(eventName, { fromBlock, toBlock: "latest" }), fromBlock };
+  } catch (err) {
+    console.warn(`getPastEvents(${eventName}) failed with a large range, retrying smaller:`, err.message);
+    fromBlock = Math.max(0, latest - 5000);
+    return { events: await contract.getPastEvents(eventName, { fromBlock, toBlock: "latest" }), fromBlock };
+  }
+}
+
+async function resolveEventTimestamps(events) {
+  const blockNumbers = [...new Set(events.map(e => e.blockNumber))];
+  const blocks = await Promise.all(blockNumbers.map(bn => readWeb3.eth.getBlock(bn)));
+  return new Map(blocks.map(b => [b.number, Number(b.timestamp)]));
+}
+
+function actionBadge(actionNum) {
+  const idx = Number(actionNum);
+  const name = ACTION_NAMES[idx] ?? ("#" + idx);
+  const cls = ACTION_CLASS[idx] ?? "idle";
+  return `<span class="badge ${cls}">${name}</span>`;
+}
+
+// Shared pipeline for loadMeterHistory() and loadWeatherHistory(), which only
+// differ in mapFn (field mapping).
+//
+// Timestamp is computed from the slot (startTimestamp + slot*SLOT_DURATION),
+// NOT from the tx's block timestamp: oracle_writer.py can send several
+// sequential tx per slot, and on a ~12s block time that can comfortably
+// exceed the target 60s slot duration, making a block-timestamp timeline
+// irregular. The slot-derived timestamp is deterministic and exactly paced.
+async function fetchRangedEvents(eventName, mapFn) {
+  const { fromTs, toTs } = getMeterRange();
+  const { events, fromBlock } = await fetchRecentEvents(oracleContract, eventName);
+  const enriched = events
+    .map(e => mapFn(e, currentStartTimestamp + Number(e.returnValues.slot) * currentSlotDuration))
+    .filter(e => e.timestamp >= fromTs && e.timestamp <= toTs)
+    .sort((a, b) => a.timestamp - b.timestamp);
+  return { enriched, fromTs, toTs, fromBlock };
+}
+
+async function loadMeterHistory() {
+  const statusEl = $("meterHistoryStatus");
+  const container = $("meterCharts");
+
+  if (!oracleContract || !readWeb3) {
+    statusEl.innerHTML = `<span class="muted">Refresh above first to connect to the chain.</span>`;
+    return;
+  }
+
+  statusEl.textContent = "Loading MeterUpdated events…";
+
+  try {
+    const { enriched, fromTs, toTs, fromBlock } = await fetchRangedEvents("MeterUpdated", (e, timestamp) => ({
+      timestamp,
+      household: e.returnValues.household,
+      slot: e.returnValues.slot,
+      consumptionWh: Number(e.returnValues.consumption),
+      productionWh: Number(e.returnValues.production)
+    }));
+
+    container.innerHTML = "";
+
+    if (enriched.length === 0) {
+      renderHouseholdStats(0, 0, 0);
+      statusEl.innerHTML = `<span class="muted">No MeterUpdated events found in the selected range (queried from block ${fromBlock}). The range may be outside what the RPC can query — try a smaller/more recent range.</span>`;
+      return;
+    }
+
+    const byHousehold = new Map();
+    for (const e of enriched) {
+      const key = e.household.toLowerCase();
+      if (!byHousehold.has(key)) byHousehold.set(key, []);
+      byHousehold.get(key).push(e);
+    }
+
+    const ids = addressIdMap(currentHouseholds);
+    for (const [addr, evs] of byHousehold.entries()) {
+      const { card, svg } = buildMeterCard(ids.get(addr) || short(addr));
+      container.appendChild(card);
+      drawMeterChart(svg, evs);
+    }
+
+    const avgConsumption = Math.round(enriched.reduce((s, e) => s + e.consumptionWh, 0) / enriched.length);
+    const avgProduction = Math.round(enriched.reduce((s, e) => s + e.productionWh, 0) / enriched.length);
+    renderHouseholdStats(byHousehold.size, avgConsumption, avgProduction);
+
+    statusEl.innerHTML = `<span class="ok">${enriched.length} event(s) across ${byHousehold.size} household(s) loaded (${new Date(fromTs * 1000).toLocaleString()} – ${new Date(toTs * 1000).toLocaleString()}, from block ${fromBlock}).</span>`;
+
+  } catch (e) {
+    console.error(e);
+    container.innerHTML = "";
+    statusEl.innerHTML = `<span class="bad">Error loading meter events: ${e.message}</span>`;
+  }
+}
+
+function buildMeterCard(id) {
+  const card = document.createElement("details");
+  card.className = "panel chart-card";
+  card.open = true;
+
+  const summary = document.createElement("summary");
+  summary.textContent = `${id} — consumption & production`;
+  card.appendChild(summary);
+
+  const svg = svgEl("svg", { style: "width:100%; height:200px; display:block;" });
+  card.appendChild(svg);
+
+  const legend = document.createElement("div");
+  legend.className = "chart-legend";
+  legend.innerHTML = `
+    <span><span class="dot" style="background:#f87171"></span>Consumption (Wh)</span>
+    <span><span class="dot" style="background:#4ade80"></span>Production (Wh)</span>
+  `;
+  card.appendChild(legend);
+
+  return { card, svg };
+}
+
+// Cloud cover has no history: WeatherUpdated doesn't emit it (only
+// slot/irradiance/temperature), so it's shown as a current stat only, not a chart.
+function renderWeatherStats(weather) {
+  const el = $("weatherStats");
+  const tile = (label, value) => `<div class="stat-tile"><div class="label">${label}</div><div class="value">${value}</div></div>`;
+  el.innerHTML =
+    tile("Cloud cover (current)", `${weather.cloudCover}%`) +
+    tile("Irradiance (current)", `${weather.irradianceWm2} W/m²`) +
+    tile("Temperature (current)", `${(Number(weather.temperatureC) / 10).toFixed(1)} °C`);
+}
+
+async function loadWeatherHistory() {
+  const statusEl = $("weatherHistoryStatus");
+  const irradianceSvg = $("weatherIrradianceChart");
+  const temperatureSvg = $("weatherTemperatureChart");
+
+  if (!oracleContract || !readWeb3) {
+    statusEl.innerHTML = `<span class="muted">Refresh above first to connect to the chain.</span>`;
+    return;
+  }
+
+  statusEl.textContent = "Loading WeatherUpdated events…";
+
+  try {
+    const { enriched, fromTs, toTs, fromBlock } = await fetchRangedEvents("WeatherUpdated", (e, timestamp) => ({
+      timestamp,
+      slot: e.returnValues.slot,
+      irradiance: Number(e.returnValues.irradiance),
+      temperatureC: Number(e.returnValues.temperature) / 10
+    }));
+
+    if (enriched.length === 0) {
+      clearChart(irradianceSvg, "No data in the selected range.");
+      clearChart(temperatureSvg, "No data in the selected range.");
+      statusEl.innerHTML = `<span class="muted">No WeatherUpdated events found in the selected range (queried from block ${fromBlock}).</span>`;
+      return;
+    }
+
+    drawWeatherChart(irradianceSvg, enriched, "irradiance", "#fbbf24", " W/m²", true);
+    drawWeatherChart(temperatureSvg, enriched, "temperatureC", "#60a5fa", " °C");
+
+    statusEl.innerHTML = `<span class="ok">${enriched.length} event(s) loaded (${new Date(fromTs * 1000).toLocaleString()} – ${new Date(toTs * 1000).toLocaleString()}, from block ${fromBlock}).</span>`;
+
+  } catch (e) {
+    console.error(e);
+    statusEl.innerHTML = `<span class="bad">Error loading weather events: ${e.message}</span>`;
+  }
+}
+
+// Catmull-Rom -> cubic Bezier so peaks between readings are rounded rather than
+// sharp. yBounds [yMin, yMax] (pixel-Y, optional) clamps control points to the
+// valid axis range: since a cubic Bezier always stays within the convex hull of
+// its control points, and the actual data points (P0/P1) already lie in range,
+// the curve between them is guaranteed to stay in range too — it never visibly
+// overshoots below 0 (or above the max), just eases smoothly against the edge.
+function smoothPathD(points, yBounds) {
+  if (points.length === 0) return "";
+  if (points.length === 1) return `M${points[0].x},${points[0].y}`;
+  if (points.length === 2) return `M${points[0].x},${points[0].y} L${points[1].x},${points[1].y}`;
+
+  const clampY = y => yBounds ? Math.min(yBounds[1], Math.max(yBounds[0], y)) : y;
+
+  let d = `M${points[0].x},${points[0].y} `;
+  for (let i = 0; i < points.length - 1; i++) {
+    const p0 = points[i - 1] || points[i];
+    const p1 = points[i];
+    const p2 = points[i + 1];
+    const p3 = points[i + 2] || p2;
+    const cp1x = p1.x + (p2.x - p0.x) / 6;
+    const cp1y = clampY(p1.y + (p2.y - p0.y) / 6);
+    const cp2x = p2.x - (p3.x - p1.x) / 6;
+    const cp2y = clampY(p2.y - (p3.y - p1.y) / 6);
+    d += `C${cp1x.toFixed(1)},${cp1y.toFixed(1)} ${cp2x.toFixed(1)},${cp2y.toFixed(1)} ${p2.x.toFixed(1)},${p2.y.toFixed(1)} `;
+  }
+  return d;
+}
+
+// Splits off a new segment at an unusually large gap (missing data point)
+// instead of bridging it with a line.
+function splitContiguous(events) {
+  if (events.length < 2) return [];
+
+  const diffs = events.slice(1).map((e, i) => e.timestamp - events[i].timestamp);
+  const median = diffs.slice().sort((a, b) => a - b)[Math.floor(diffs.length / 2)] || 60;
+  const gapThreshold = Math.max(median * 1.8, median + 60);
+
+  const segments = [];
+  let current = [events[0]];
+  for (let i = 1; i < events.length; i++) {
+    if (events[i].timestamp - events[i - 1].timestamp > gapThreshold) {
+      if (current.length >= 2) segments.push(current);
+      current = [events[i]];
+    } else {
+      current.push(events[i]);
+    }
+  }
+  if (current.length >= 2) segments.push(current);
+  return segments;
+}
+
+/** Time-axis ticks rounded to full hours, step size matched to the span. */
+function hourTicks(tMin, tMax, maxTicks) {
+  const steps = [1, 2, 3, 4, 6, 12, 24, 48, 72, 168]; // hours
+  const spanH = (tMax - tMin) / 3600;
+  const stepSec = (steps.find(s => spanH / s <= maxTicks) || steps[steps.length - 1]) * 3600;
+
+  const ticks = [];
+  for (let t = Math.ceil(tMin / stepSec) * stepSec; t <= tMax; t += stepSec) ticks.push(t);
+  return ticks.length ? ticks : [tMin, tMax];
+}
+
+function formatHourTick(t, spanSeconds) {
+  const d = new Date(t * 1000);
+  const hh = d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  if (spanSeconds <= 26 * 3600) return hh;
+  const dd = d.toLocaleDateString([], { day: "2-digit", month: "2-digit" });
+  return spanSeconds <= 9 * 24 * 3600 ? `${dd} ${hh}` : dd;
+}
+
+// Axes + gridlines for a time line chart; returns scaling functions and yBounds
+// (pixel-Y bounds for smoothPathD(), see above). Shared by drawMeterChart() and
+// drawWeatherChart().
+function initChart(svg, tMin, tMax, minVal, maxVal) {
+  svg.innerHTML = "";
+
+  // Set viewBox 1:1 to the actually rendered width — otherwise preserveAspectRatio
+  // scales x and y unevenly and text/lines look distorted.
+  const width = Math.round(svg.getBoundingClientRect().width) || 900;
+  const height = 200;
+  const padLeft = 54, padRight = 16, padTop = 14, padBottom = 28;
+
+  svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+  svg.style.height = height + "px";
+
+  const tSpan = Math.max(1, tMax - tMin);
+  const vSpan = Math.max(1, maxVal - minVal);
+  const xScale = t => padLeft + ((t - tMin) / tSpan) * (width - padLeft - padRight);
+  const yScale = v => height - padBottom - ((v - minVal) / vSpan) * (height - padTop - padBottom);
+
+  // Horizontal gridlines + Y-axis labels (min / mid / max)
+  [0, 0.5, 1].forEach(f => {
+    const val = minVal + vSpan * f;
+    const y = yScale(val);
+    svg.appendChild(svgEl("line", { x1: padLeft, x2: width - padRight, y1: y, y2: y, stroke: "#22262f" }));
+    const label = svgEl("text", { x: padLeft - 8, y: y + 3, fill: "#666", "font-size": 10, "text-anchor": "end" });
+    label.textContent = Math.round(val);
+    svg.appendChild(label);
+  });
+
+  // Vertical gridlines on full hours (count depends on available width)
+  const maxTicks = Math.max(3, Math.floor((width - padLeft - padRight) / 130));
+  const ticks = hourTicks(tMin, tMax, maxTicks);
+  ticks.forEach((t, i) => {
+    const x = xScale(t);
+    svg.appendChild(svgEl("line", { x1: x, x2: x, y1: padTop, y2: height - padBottom, stroke: "#22262f" }));
+    const label = svgEl("text", {
+      x, y: height - 8, fill: "#666", "font-size": 10,
+      "text-anchor": i === 0 ? "start" : i === ticks.length - 1 ? "end" : "middle"
+    });
+    label.textContent = formatHourTick(t, tSpan);
+    svg.appendChild(label);
+  });
+
+  // Visible axis lines (left + bottom)
+  svg.appendChild(svgEl("path", {
+    d: `M${padLeft},${padTop} L${padLeft},${height - padBottom} L${width - padRight},${height - padBottom}`,
+    fill: "none", stroke: "#333944"
+  }));
+
+  return { xScale, yScale, yBounds: [padTop, height - padBottom] };
+}
+
+function drawLineSeries(svg, events, segments, xScale, yScale, yBounds, key, color, tooltip) {
+  for (const seg of segments) {
+    const pts = seg.map(e => ({ x: xScale(e.timestamp), y: yScale(e[key]) }));
+    svg.appendChild(svgEl("path", {
+      d: smoothPathD(pts, yBounds), fill: "none", stroke: color,
+      "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round"
+    }));
+  }
+
+  // Invisible, larger hover targets instead of visible dots
+  events.forEach(e => {
+    const c = svgEl("circle", { cx: xScale(e.timestamp), cy: yScale(e[key]), r: 6, fill: "transparent" });
+    const title = document.createElementNS(SVG_NS, "title");
+    title.textContent = tooltip(e);
+    c.appendChild(title);
+    svg.appendChild(c);
+  });
+}
+
+function drawMeterChart(svg, events) {
+  const tMin = events[0].timestamp, tMax = events[events.length - 1].timestamp;
+  const rawMax = Math.max(1, ...events.map(e => Math.max(e.consumptionWh, e.productionWh)));
+  const maxVal = rawMax * 1.15; // headroom so curve overshoot doesn't touch the top edge
+  const { xScale, yScale, yBounds } = initChart(svg, tMin, tMax, 0, maxVal);
+  const segments = splitContiguous(events);
+
+  drawLineSeries(svg, events, segments, xScale, yScale, yBounds, "productionWh", "#4ade80",
+    e => `Production: ${e.productionWh} Wh — slot ${e.slot} — ${fmtTs(e.timestamp)}`);
+  drawLineSeries(svg, events, segments, xScale, yScale, yBounds, "consumptionWh", "#f87171",
+    e => `Consumption: ${e.consumptionWh} Wh — slot ${e.slot} — ${fmtTs(e.timestamp)}`);
+}
+
+// Y-axis follows the actual value range (+15% margin) instead of always starting
+// at 0, since e.g. temperature can be negative. floorAtZero still enforces a
+// lower bound of 0 for quantities that can never physically be negative (irradiance).
+function drawWeatherChart(svg, events, key, color, unit, floorAtZero) {
+  const tMin = events[0].timestamp, tMax = events[events.length - 1].timestamp;
+  const vals = events.map(e => e[key]);
+  const rawMin = Math.min(...vals), rawMax = Math.max(...vals);
+  const margin = Math.max(1, (rawMax - rawMin) * 0.15);
+  const minVal = floorAtZero ? Math.max(0, rawMin - margin) : rawMin - margin;
+  const { xScale, yScale, yBounds } = initChart(svg, tMin, tMax, minVal, rawMax + margin);
+  const segments = splitContiguous(events);
+
+  drawLineSeries(svg, events, segments, xScale, yScale, yBounds, key, color,
+    e => `${e[key]}${unit} — slot ${e.slot} — ${fmtTs(e.timestamp)}`);
+}
+
+function clearChart(svg, message) {
+  svg.innerHTML = "";
+  svg.setAttribute("viewBox", "0 0 400 40");
+  svg.style.height = "40px";
+  const text = svgEl("text", { x: 10, y: 24, fill: "#666", "font-size": 12 });
+  text.textContent = message;
+  svg.appendChild(text);
+}
+
+async function loadBatteryManager(web3, oracle, battMgrAddress, knownHouseholds, onChainMarketHouseholds) {
+  const batteryKv = $("batteryKv");
+  const tbody = document.querySelector("#batteryTable tbody");
+  batteryKv.innerHTML = "";
+  tbody.innerHTML = "";
+  batteryContract = null;
+  currentBatteryHouseholds = [];
+
+  if (!battMgrAddress || battMgrAddress === ZERO) {
+    kvRow(batteryKv, "Status", "— not set (market.batteryManager() == address(0))", "muted");
+    $("batteryStatus").innerHTML = `<span class="muted">BatteryManager isn't linked in the market yet (setBatteryManager()) — phase 2 is optional.</span>`;
+    drawBatteryChart([]);
+    document.querySelector("#batteryEventsTable tbody").innerHTML = "";
+    $("batteryEventsStatus").textContent = "";
+    return;
+  }
+
+  const battery = new web3.eth.Contract(BATTERY_ABI, battMgrAddress);
+  batteryContract = battery;
+
+  $("batteryStatus").textContent = "Loading BatteryManager…";
+
+  try {
+    const [bOwner, bOracle, managedOnChain] = await Promise.all([
+      battery.methods.owner().call(),
+      battery.methods.oracle().call(),
+      battery.methods.getManagedHouseholds().call()
+    ]);
+
+    kvAddrRow(batteryKv, "Address", battMgrAddress);
+    kvAddrRow(batteryKv, "Owner", bOwner);
+    kvAddrRow(batteryKv, "Oracle", bOracle, bOracle.toLowerCase() === cfg.oracle.toLowerCase() ? "ok" : "bad");
+    kvRow(batteryKv, "Managed households (on-chain)", managedOnChain.length);
+
+    // Union of known list, market-registered and on-chain managed households.
+    const union = mergeHouseholds(
+      mergeHouseholds(knownHouseholds, onChainMarketHouseholds),
+      managedOnChain
+    );
+    currentBatteryHouseholds = union;
+
+    if (union.length === 0) {
+      $("batteryStatus").innerHTML = `<span class="muted">No households known.</span>`;
+      return;
+    }
+
+    const rows = await Promise.all(union.map(async (h) => {
+      const [isManaged, decision, battState] = await Promise.all([
+        battery.methods.isManaged(h.address).call(),
+        battery.methods.getLastDecision(h.address).call(),
+        oracle.methods.getLatestBatteryState(h.address).call()
+      ]);
+      return { ...h, isManaged, decision, battState };
+    }));
+
+    for (const r of rows) {
+      const hasDecision = r.isManaged && Number(r.decision.timestamp) > 0;
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${r.id}</td>
+        <td>${addrCell(r.address)}</td>
+        <td class="${r.isManaged ? "ok" : "muted"}">${r.isManaged ? "✓" : "✗"}</td>
+        <td>${hasDecision ? actionBadge(r.decision.action) : `<span class="muted">-</span>`}</td>
+        <td>${hasDecision ? r.decision.amountWh : "-"}</td>
+        <td>${hasDecision ? r.decision.slot : "-"}</td>
+        <td>${hasDecision ? fmtTs(r.decision.timestamp) : "-"}</td>
+        <td>${r.battState.capacityWh > 0 ? r.battState.socPercent + "%" : "-"}</td>
+      `;
+      tbody.appendChild(tr);
+    }
+
+    const managedCount = rows.filter(r => r.isManaged).length;
+    $("batteryStatus").innerHTML = `<span class="ok">${rows.length} household(s) checked, ${managedCount} with managed battery.</span>`;
+
+  } catch (e) {
+    console.error(e);
+    $("batteryStatus").innerHTML = `<span class="bad">Error loading BatteryManager: ${e.message}</span>`;
+  }
+}
+
+async function loadBatteryEvents() {
+  const statusEl = $("batteryEventsStatus");
+  const tbody = document.querySelector("#batteryEventsTable tbody");
+
+  if (!batteryContract) {
+    statusEl.innerHTML = `<span class="muted">No BatteryManager linked — refresh above first.</span>`;
+    return;
+  }
+
+  statusEl.textContent = "Loading DecisionMade events…";
+  tbody.innerHTML = "";
+
+  try {
+    const { events, fromBlock } = await fetchRecentEvents(batteryContract, "DecisionMade");
+    const tsByBlock = await resolveEventTimestamps(events);
+    const idByAddress = addressIdMap(currentBatteryHouseholds);
+
+    const enriched = events.map(e => ({
+      blockNumber: e.blockNumber,
+      timestamp: tsByBlock.get(e.blockNumber) || 0,
+      household: e.returnValues.household,
+      action: Number(e.returnValues.action),
+      amountWh: e.returnValues.amountWh,
+      slot: e.returnValues.slot,
+      reason: e.returnValues.reason
+    })).sort((a, b) => b.timestamp - a.timestamp || b.blockNumber - a.blockNumber);
+
+    for (const ev of enriched) {
+      const id = idByAddress.get(ev.household.toLowerCase()) || short(ev.household);
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${ev.timestamp ? fmtTs(ev.timestamp) : "Block #" + ev.blockNumber}</td>
+        <td title="${ev.household}">${id}</td>
+        <td>${actionBadge(ev.action)}</td>
+        <td>${ev.amountWh}</td>
+        <td>${ev.slot}</td>
+        <td class="muted">${ev.reason || "-"}</td>
+      `;
+      tbody.appendChild(tr);
+    }
+
+    if (enriched.length === 0) {
+      statusEl.innerHTML = `<span class="muted">No DecisionMade events found in the queried block range.</span>`;
+    } else {
+      statusEl.innerHTML = `<span class="ok">${enriched.length} event(s) loaded (from block ${fromBlock}).</span>`;
+    }
+
+    drawBatteryChart(enriched.slice().reverse()); // chronological for the chart
+
+  } catch (e) {
+    console.error(e);
+    statusEl.innerHTML = `<span class="bad">Error loading events: ${e.message}</span>`;
+    drawBatteryChart([]);
+  }
+}
+
+// Swimlane per household: x = time, dot color = action, size ~ amountWh
+function drawBatteryChart(events) {
+  const svg = $("batteryChart");
+  svg.innerHTML = "";
+
+  if (!events || events.length === 0) {
+    const text = svgEl("text", { x: 10, y: 24, fill: "#666", "font-size": 12 });
+    text.textContent = "No events loaded — click the button above.";
+    svg.appendChild(text);
+    svg.setAttribute("viewBox", "0 0 400 40");
+    return;
+  }
+
+  const households = [...new Set(events.map(e => e.household.toLowerCase()))];
+  const laneHeight = 34, padLeft = 90, padRight = 20, padTop = 10;
+  const width = Math.max(600, events.length * 14 + padLeft + padRight);
+  const height = padTop + households.length * laneHeight + 20;
+
+  svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+  svg.setAttribute("width", width);
+  svg.setAttribute("height", height);
+
+  const idByAddress = addressIdMap(currentBatteryHouseholds);
+  const colors = { 0: "#9aa0ab", 1: "#4ade80", 2: "#fbbf24" };
+
+  const tMin = Math.min(...events.map(e => e.timestamp || 0));
+  const tMax = Math.max(...events.map(e => e.timestamp || 0));
+  const tSpan = Math.max(1, tMax - tMin);
+
+  households.forEach((addr, laneIdx) => {
+    const y = padTop + laneIdx * laneHeight + laneHeight / 2;
+
+    const label = svgEl("text", { x: 4, y: y + 4, fill: "#9fd3ff", "font-size": 11, "font-family": "ui-monospace, Consolas, monospace" });
+    label.textContent = idByAddress.get(addr) || short(addr);
+    svg.appendChild(label);
+
+    svg.appendChild(svgEl("line", { x1: padLeft, y1: y, x2: width - padRight, y2: y, stroke: "#22262f" }));
+  });
+
+  const laneIndex = new Map(households.map((a, i) => [a, i]));
+  const maxAmount = Math.max(1, ...events.map(e => Number(e.amountWh) || 0));
+
+  events.forEach(e => {
+    const laneIdx = laneIndex.get(e.household.toLowerCase());
+    if (laneIdx === undefined) return;
+    const y = padTop + laneIdx * laneHeight + laneHeight / 2;
+    const x = padLeft + ((e.timestamp - tMin) / tSpan) * (width - padLeft - padRight);
+    const amount = Number(e.amountWh) || 0;
+
+    const circle = svgEl("circle", {
+      cx: x, cy: y, r: 3 + (amount / maxAmount) * 7,
+      fill: colors[e.action] || "#9aa0ab",
+      "fill-opacity": e.action === 0 ? 0.5 : 0.9,
+      stroke: "#0f1115"
+    });
+
+    const title = document.createElementNS(SVG_NS, "title");
+    title.textContent =
+      `${ACTION_NAMES[e.action] ?? e.action} ${amount}Wh — slot ${e.slot}` +
+      (e.reason ? ` — ${e.reason}` : "") +
+      (e.timestamp ? ` — ${fmtTs(e.timestamp)}` : "");
+    circle.appendChild(title);
+
+    svg.appendChild(circle);
+  });
+}
+
+// IncentiveController has no household enumeration function (unlike
+// BatteryManager.getManagedHouseholds()) — use currentHouseholds directly.
+async function loadIncentiveController(web3, incentiveAddress, households) {
+  const kv = $("incentiveKv");
+  const tbody = document.querySelector("#incentiveTable tbody");
+  kv.innerHTML = "";
+  tbody.innerHTML = "";
+  incentiveContract = null;
+
+  if (!incentiveAddress || incentiveAddress === ZERO) {
+    kvRow(kv, "Status", "— not set (market.incentiveController() == address(0))", "muted");
+    $("incentiveStatus").innerHTML = `<span class="muted">IncentiveController isn't linked in the market yet (setIncentiveController()) — phase 3 is optional.</span>`;
+    document.querySelector("#incentiveEventsTable tbody").innerHTML = "";
+    $("incentiveEventsStatus").textContent = "";
+    return;
+  }
+
+  const incentive = new web3.eth.Contract(INCENTIVE_ABI, incentiveAddress);
+  incentiveContract = incentive;
+
+  $("incentiveStatus").textContent = "Loading IncentiveController…";
+
+  try {
+    const owner = await incentive.methods.owner().call();
+    kvAddrRow(kv, "Address", incentiveAddress);
+    kvAddrRow(kv, "Owner", owner);
+
+    if (households.length === 0) {
+      $("incentiveStatus").innerHTML = `<span class="muted">No households known.</span>`;
+      return;
+    }
+
+    const rows = await Promise.all(households.map(async h => {
+      const [score, multiplier] = await Promise.all([
+        incentive.methods.getReputationScore(h.address).call(),
+        incentive.methods.getPriceMultiplier(h.address).call()
+      ]);
+      return { ...h, score, multiplier };
+    }));
+
+    for (const r of rows) {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${r.id}</td>
+        <td>${addrCell(r.address)}</td>
+        <td>${r.score}</td>
+        <td>${(Number(r.multiplier) / 10).toFixed(1)}%</td>
+      `;
+      tbody.appendChild(tr);
+    }
+
+    $("incentiveStatus").innerHTML = `<span class="ok">${rows.length} household(s) checked.</span>`;
+  } catch (e) {
+    console.error(e);
+    $("incentiveStatus").innerHTML = `<span class="bad">Error loading IncentiveController: ${e.message}</span>`;
+  }
+}
+
+async function loadIncentiveEvents() {
+  const statusEl = $("incentiveEventsStatus");
+  const tbody = document.querySelector("#incentiveEventsTable tbody");
+
+  if (!incentiveContract) {
+    statusEl.innerHTML = `<span class="muted">No IncentiveController linked — refresh above first.</span>`;
+    return;
+  }
+
+  statusEl.textContent = "Loading ScoreUpdated events…";
+  tbody.innerHTML = "";
+
+  try {
+    const { events, fromBlock } = await fetchRecentEvents(incentiveContract, "ScoreUpdated");
+    const tsByBlock = await resolveEventTimestamps(events);
+    const ids = addressIdMap(currentHouseholds);
+
+    const enriched = events.map(e => ({
+      timestamp: tsByBlock.get(e.blockNumber) || 0,
+      household: e.returnValues.household,
+      newScore: e.returnValues.newScore,
+      deviation: e.returnValues.deviation
+    })).sort((a, b) => b.timestamp - a.timestamp);
+
+    for (const ev of enriched) {
+      const id = ids.get(ev.household.toLowerCase()) || short(ev.household);
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${fmtTs(ev.timestamp)}</td>
+        <td title="${ev.household}">${id}</td>
+        <td>${ev.newScore}</td>
+        <td>${ev.deviation}</td>
+      `;
+      tbody.appendChild(tr);
+    }
+
+    statusEl.innerHTML = enriched.length === 0
+      ? `<span class="muted">No ScoreUpdated events found in the queried block range.</span>`
+      : `<span class="ok">${enriched.length} event(s) loaded (from block ${fromBlock}).</span>`;
+  } catch (e) {
+    console.error(e);
+    statusEl.innerHTML = `<span class="bad">Error loading events: ${e.message}</span>`;
+  }
+}
+
+async function testSettleSlot() {
+  $("settleResult").textContent = "Simulating…";
+  try {
+    const market = new readWeb3.eth.Contract(MARKET_ABI, cfg.market);
+    await market.methods.settleSlot().call();
+    $("settleResult").innerHTML = `<span class="ok">✓ Would run without reverting.</span>`;
+  } catch (e) {
+    $("settleResult").innerHTML = `<span class="bad">✗ Reverts: ${e.message}</span>`;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+//  Init
+// ─────────────────────────────────────────────────────────────
+
+async function init() {
+  setupNav();
+  readWeb3 = new Web3(new Web3.providers.HttpProvider(RPC_URL));
+
+  cfg.oracle = readParamFromUrl("oracle") || "";
+  cfg.market = readParamFromUrl("market") || "";
+  cfg.batteryOverride = readParamFromUrl("battery") || "";
+  cfg.incentiveOverride = readParamFromUrl("incentive") || "";
+  const householdsRaw = readParamFromUrl("households");
+  try { cfg.households = householdsRaw ? JSON.parse(householdsRaw) : []; }
+  catch (e) { cfg.households = []; }
+
+  applyConfigToForm();
+  initMeterRangeDefaults();
+
+  if (!cfg.oracle || !cfg.market) {
+    $("missingParamsBanner").style.display = "block";
+    return;
+  }
+
+  try {
+    cfg.oracle = Web3.utils.toChecksumAddress(cfg.oracle);
+    cfg.market = Web3.utils.toChecksumAddress(cfg.market);
+  } catch (e) {
+    $("cfgStatus").innerHTML = `<span class="bad">Invalid address in URL params.</span>`;
+    return;
+  }
+
+  await refresh();
+}
+
+init();
+</script>
+
+</body>
+</html>

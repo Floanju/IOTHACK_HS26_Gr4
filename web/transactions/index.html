@@ -1,0 +1,555 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Energy Trading — Transactions</title>
+<script src="https://cdn.jsdelivr.net/npm/web3@1.10.4/dist/web3.min.js"></script>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, Segoe UI, Roboto, sans-serif;
+    background: #0f1115;
+    color: #e6e6e6;
+    margin: 0;
+    padding: 24px;
+  }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h2 { font-size: 15px; margin: 0 0 10px; color: #9fd3ff; }
+  .sub { color: #888; font-size: 13px; margin-bottom: 16px; }
+  .topnav { display: flex; gap: 4px; margin-bottom: 18px; border-bottom: 1px solid #22262f; padding-bottom: 12px; }
+  .topnav a {
+    color: #9fd3ff; text-decoration: none; font-size: 13px;
+    padding: 6px 12px; border-radius: 6px; background: #171a21; border: 1px solid #2a2e38;
+  }
+  .topnav a.active { background: #2b6cb0; color: #fff; border-color: #2b6cb0; }
+  .topnav a:hover:not(.active) { background: #1c2028; }
+  .panel {
+    background: #171a21;
+    border: 1px solid #2a2e38;
+    border-radius: 8px;
+    padding: 16px 18px;
+    margin-bottom: 16px;
+  }
+  .config-grid {
+    display: grid;
+    grid-template-columns: 160px 1fr;
+    gap: 8px 12px;
+    align-items: center;
+  }
+  .config-grid label { font-size: 12px; color: #aaa; }
+  input[type=text], input[type=number] {
+    width: 100%;
+    background: #0f1115;
+    border: 1px solid #333944;
+    color: #e6e6e6;
+    border-radius: 4px;
+    padding: 6px 8px;
+    font-family: ui-monospace, Consolas, monospace;
+    font-size: 12px;
+  }
+  input[readonly] { color: #999; background: #14161b; }
+  button {
+    background: #2b6cb0;
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    padding: 8px 16px;
+    font-size: 13px;
+    cursor: pointer;
+    margin-top: 10px;
+    margin-right: 8px;
+  }
+  button:hover { background: #3a7fca; }
+  button.copy { background: #262b35; padding: 2px 6px; font-size: 11px; margin: 0 0 0 6px; border: 1px solid #333944; }
+  button.copy:hover { background: #333944; }
+  button.copy.done { background: #14351f; color: #4ade80; border-color: #1c4a2c; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td {
+    text-align: left;
+    padding: 6px 8px;
+    border-bottom: 1px solid #22262f;
+    white-space: nowrap;
+  }
+  th { color: #9fd3ff; font-weight: 600; }
+  .addr-cell { display: flex; align-items: center; }
+  .ok { color: #4ade80; }
+  .bad { color: #f87171; }
+  .pos { color: #4ade80; }
+  .neg { color: #f87171; }
+  .muted { color: #666; }
+  .stat-row { display: flex; gap: 24px; flex-wrap: wrap; margin-bottom: 12px; }
+  .stat { }
+  .stat .label { font-size: 11px; color: #888; text-transform: none; }
+  .stat .value { font-size: 18px; font-family: ui-monospace, Consolas, monospace; }
+  .bar-wrap { display: flex; align-items: center; gap: 8px; }
+  .bar-track { flex: 1; background: #0f1115; border-radius: 3px; height: 8px; min-width: 60px; overflow: hidden; }
+  .bar-fill { background: #2b6cb0; height: 100%; }
+  .hint { color: #888; font-size: 12px; margin-bottom: 8px; }
+  .banner { padding: 10px 14px; border-radius: 6px; font-size: 13px; margin-bottom: 16px; }
+  .banner.warn { background: #2a2110; border: 1px solid #4a3b14; color: #fbbf24; }
+</style>
+</head>
+<body>
+
+<div class="topnav">
+  <a href="#" id="navHome">Home</a>
+  <a href="#" id="navAdmin">Admin</a>
+  <a href="#" id="navSelfservice">Self-Service</a>
+  <a href="#" id="navTransactions" class="active">Transactions</a>
+  <a href="#" id="navOverview">Overview</a>
+</div>
+
+<h1>Energy Trading — Transactions</h1>
+<div class="sub">
+  Last settlement, per-account balances, and energy exchanged between accounts. Read-only — no
+  wallet needed.
+</div>
+
+<div id="missingParamsBanner" class="banner warn" style="display:none;">
+  Missing <code>oracle</code> and/or <code>market</code> URL parameter. Enter both below and
+  click "Load" — there are no built-in defaults, this page only works with an explicit deployment.
+</div>
+
+<div class="panel">
+  <h2>Deployment</h2>
+  <div class="config-grid">
+    <label>OracleStorage</label>
+    <input type="text" id="cfgOracle" placeholder="0x...">
+
+    <label>P2PEnergyMarket</label>
+    <input type="text" id="cfgMarket" placeholder="0x...">
+
+    <label>Stablecoin</label>
+    <input type="text" id="cfgStablecoin" readonly placeholder="(auto, via market.stablecoin())">
+  </div>
+  <button onclick="loadConfig()">Load</button>
+  <div id="cfgStatus" class="muted" style="margin-top:6px; font-size:12px;"></div>
+</div>
+
+<div class="panel">
+  <h2>Lookback window</h2>
+  <div class="hint">
+    Trade and transfer history is read via eth_getLogs over the last N blocks (no indexer/API key
+    needed). Some public RPC providers cap the block range per request — lower this if a reload
+    errors out. ~10000 blocks is roughly a day+ of buffer at Sepolia's ~12s block time; the "last
+    24h" columns below filter down to real timestamps within that window.
+  </div>
+  <label style="font-size:12px; color:#aaa;">Blocks to scan</label>
+  <input type="number" id="lookbackBlocks" value="10000" style="max-width:160px; display:inline-block;">
+  <button onclick="refreshAll()">Reload</button>
+  <div id="lookbackStatus" class="muted" style="margin-top:6px; font-size:12px;"></div>
+</div>
+
+<div class="panel">
+  <h2>Last settlement <span class="muted" style="font-weight:400; font-size:12px;" id="lastSlotLabel"></span></h2>
+  <div class="stat-row" id="lastSettlementStats"></div>
+  <table id="lastSettlementTable">
+    <thead><tr><th>Address</th><th>Role</th><th>Net amount</th></tr></thead>
+    <tbody></tbody>
+  </table>
+  <div id="lastSettlementStatus" class="muted" style="margin-top:8px; font-size:12px;"></div>
+</div>
+
+<div class="panel">
+  <h2>Accounts overview</h2>
+  <table id="accountsTable">
+    <thead><tr><th>Address</th><th>Type</th><th>Net worth</th><th>Change in last settlement</th><th>Net balance (24h)</th></tr></thead>
+    <tbody></tbody>
+  </table>
+  <div id="accountsStatus" class="muted" style="margin-top:8px; font-size:12px;"></div>
+</div>
+
+<div class="panel">
+  <h2>Energy exchanged <span class="muted" style="font-weight:400; font-size:12px;">— last 24h, producer → consumer</span></h2>
+  <table id="flowTable">
+    <thead><tr><th>From (producer)</th><th>To (consumer)</th><th>Energy</th><th></th><th>Amount paid</th><th>Trades</th></tr></thead>
+    <tbody></tbody>
+  </table>
+  <div id="flowStatus" class="muted" style="margin-top:8px; font-size:12px;"></div>
+</div>
+
+<script>
+const RPC_URL = "https://ethereum-sepolia-rpc.publicnode.com";
+const DAY_SECONDS = 86400;
+
+const MARKET_ABI = [
+  {"inputs":[],"name":"getAllHouseholds","outputs":[{"internalType":"address[]","name":"","type":"address[]"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"getAllProducers","outputs":[{"internalType":"address[]","name":"","type":"address[]"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"stablecoin","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"lastSettledSlot","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"anonymous":false,"inputs":[
+    {"indexed":true,"internalType":"address","name":"producer","type":"address"},
+    {"indexed":true,"internalType":"address","name":"consumer","type":"address"},
+    {"indexed":false,"internalType":"uint256","name":"energyWh","type":"uint256"},
+    {"indexed":false,"internalType":"uint256","name":"amountPaid","type":"uint256"},
+    {"indexed":false,"internalType":"uint256","name":"slot","type":"uint256"}
+  ],"name":"EnergyTraded","type":"event"},
+  {"anonymous":false,"inputs":[
+    {"indexed":true,"internalType":"uint256","name":"slot","type":"uint256"},
+    {"indexed":false,"internalType":"uint256","name":"totalEnergyTraded","type":"uint256"},
+    {"indexed":false,"internalType":"uint256","name":"totalPaid","type":"uint256"}
+  ],"name":"SlotSettled","type":"event"}
+];
+
+const ERC20_ABI = [
+  {"inputs":[{"internalType":"address","name":"account","type":"address"}],"name":"balanceOf","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"decimals","outputs":[{"internalType":"uint8","name":"","type":"uint8"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"symbol","outputs":[{"internalType":"string","name":"","type":"string"}],"stateMutability":"view","type":"function"},
+  {"anonymous":false,"inputs":[
+    {"indexed":true,"internalType":"address","name":"from","type":"address"},
+    {"indexed":true,"internalType":"address","name":"to","type":"address"},
+    {"indexed":false,"internalType":"uint256","name":"value","type":"uint256"}
+  ],"name":"Transfer","type":"event"}
+];
+
+const $ = id => document.getElementById(id);
+const short = a => a ? a.slice(0,6) + "…" + a.slice(-4) : "-";
+
+let cfg = { oracle: "", market: "", stablecoin: "" };
+let readWeb3;
+const blockTimestampCache = {};
+
+function readParamFromUrl(name) {
+  try {
+    const v = new URLSearchParams(window.location.search).get(name);
+    return v ? v.trim() : null;
+  } catch (e) { return null; }
+}
+
+function syncParamsToUrl(params) {
+  try {
+    const url = new URL(window.location.href);
+    for (const [key, value] of Object.entries(params)) {
+      if (value) url.searchParams.set(key, value);
+      else url.searchParams.delete(key);
+    }
+    history.replaceState(null, "", url.toString());
+  } catch (e) {
+    console.warn("syncParamsToUrl failed:", e.message);
+  }
+}
+
+function setupNav() {
+  const qs = window.location.search;
+  $("navHome").href = "../index.html" + qs;
+  $("navAdmin").href = "../admin/index.html" + qs;
+  $("navSelfservice").href = "../selfservice/index.html" + qs;
+  $("navOverview").href = "../overview/index.html" + qs;
+}
+
+function applyConfigToForm() {
+  $("cfgOracle").value = cfg.oracle || "";
+  $("cfgMarket").value = cfg.market || "";
+  $("cfgStablecoin").value = cfg.stablecoin || "";
+}
+
+async function loadConfig() {
+  const oracleRaw = $("cfgOracle").value.trim();
+  const marketRaw = $("cfgMarket").value.trim();
+  let oracle, market;
+  try { oracle = Web3.utils.toChecksumAddress(oracleRaw); }
+  catch (e) { $("cfgStatus").innerHTML = `<span class="bad">Invalid OracleStorage address.</span>`; return; }
+  try { market = Web3.utils.toChecksumAddress(marketRaw); }
+  catch (e) { $("cfgStatus").innerHTML = `<span class="bad">Invalid P2PEnergyMarket address.</span>`; return; }
+
+  cfg.oracle = oracle;
+  cfg.market = market;
+  syncParamsToUrl({ oracle: cfg.oracle, market: cfg.market });
+  $("missingParamsBanner").style.display = "none";
+  $("cfgStatus").textContent = "Loading…";
+
+  await fetchDerivedAddresses();
+  applyConfigToForm();
+  await refreshAll();
+}
+
+async function fetchDerivedAddresses() {
+  const marketR = new readWeb3.eth.Contract(MARKET_ABI, cfg.market);
+  try {
+    cfg.stablecoin = await marketR.methods.stablecoin().call();
+    $("cfgStatus").innerHTML = `<span class="ok">Loaded.</span>`;
+  } catch (e) {
+    cfg.stablecoin = "";
+    $("cfgStatus").innerHTML = `<span class="bad">Could not read stablecoin() from market: ${e.message}</span>`;
+  }
+}
+
+function copyAddress(addr, btn) {
+  navigator.clipboard.writeText(addr).then(() => {
+    const original = btn.textContent;
+    btn.textContent = "✓";
+    btn.classList.add("done");
+    setTimeout(() => { btn.textContent = original; btn.classList.remove("done"); }, 1200);
+  }).catch(() => { alert(addr); });
+}
+
+function addrCell(addr) {
+  return `<div class="addr-cell"><span title="${addr}">${short(addr)}</span><button class="copy" onclick="copyAddress('${addr}', this)">Copy</button></div>`;
+}
+
+function fmtToken(raw, decimals) {
+  const sign = raw < 0n ? "-" : "";
+  const abs = raw < 0n ? -raw : raw;
+  return sign + (Number(abs) / 10 ** Number(decimals)).toString();
+}
+
+function fmtSigned(raw, decimals, symbol) {
+  if (raw === 0n) return `<span class="muted">0 ${symbol}</span>`;
+  const cls = raw > 0n ? "pos" : "neg";
+  const sign = raw > 0n ? "+" : "";
+  return `<span class="${cls}">${sign}${fmtToken(raw, decimals)} ${symbol}</span>`;
+}
+
+async function getBlockTimestamp(blockNumber) {
+  if (blockTimestampCache[blockNumber] !== undefined) return blockTimestampCache[blockNumber];
+  const block = await readWeb3.eth.getBlock(blockNumber);
+  const ts = Number(block.timestamp);
+  blockTimestampCache[blockNumber] = ts;
+  return ts;
+}
+
+// ─────────────────────────────────────────────────────────────
+//  Main data load
+// ─────────────────────────────────────────────────────────────
+
+async function refreshAll() {
+  if (!cfg.market || !cfg.stablecoin) return;
+
+  const lookback = Math.max(1, parseInt($("lookbackBlocks").value, 10) || 10000);
+  $("lookbackStatus").textContent = "Loading…";
+  $("lastSettlementStatus").textContent = "Loading…";
+  $("accountsStatus").textContent = "Loading…";
+  $("flowStatus").textContent = "Loading…";
+
+  const marketR = new readWeb3.eth.Contract(MARKET_ABI, cfg.market);
+  const stablecoinR = new readWeb3.eth.Contract(ERC20_ABI, cfg.stablecoin);
+
+  try {
+    if (window._decimals === undefined) {
+      window._decimals = Number(await stablecoinR.methods.decimals().call());
+      window._symbol = await stablecoinR.methods.symbol().call();
+    }
+    const decimals = window._decimals;
+    const symbol = window._symbol;
+
+    const latestBlock = Number(await readWeb3.eth.getBlockNumber());
+    const fromBlock = Math.max(0, latestBlock - lookback);
+    const nowTs = await getBlockTimestamp(latestBlock);
+    const cutoffTs = nowTs - DAY_SECONDS;
+
+    const [lastSettledSlot, households, producers] = await Promise.all([
+      marketR.methods.lastSettledSlot().call(),
+      marketR.methods.getAllHouseholds().call(),
+      marketR.methods.getAllProducers().call().catch(() => [])
+    ]);
+
+    $("lookbackStatus").innerHTML = `<span class="ok">Scanning blocks ${fromBlock} → ${latestBlock} (${latestBlock - fromBlock} blocks).</span>`;
+
+    const energyEvents = await marketR.getPastEvents("EnergyTraded", { fromBlock, toBlock: "latest" });
+
+    // Timestamps for every block that has an EnergyTraded event, so we can
+    // split "last settlement" (by slot) from "last 24h" (by real time).
+    const uniqueBlocks = [...new Set(energyEvents.map(e => e.blockNumber))];
+    await Promise.all(uniqueBlocks.map(bn => getBlockTimestamp(bn)));
+
+    const lastSlotStr = lastSettledSlot.toString();
+    const lastSettlementTrades = energyEvents.filter(e => e.returnValues.slot === lastSlotStr);
+    const last24hTrades = energyEvents.filter(e => blockTimestampCache[e.blockNumber] >= cutoffTs);
+
+    renderLastSettlement(lastSlotStr, lastSettlementTrades, decimals, symbol);
+    renderFlowTable(last24hTrades, decimals, symbol);
+
+    // 24h net balance from raw ERC-20 Transfer events (captures any balance
+    // movement, not just P2P settlements).
+    const transferEvents = await stablecoinR.getPastEvents("Transfer", { fromBlock, toBlock: "latest" });
+    const uniqueTransferBlocks = [...new Set(transferEvents.map(e => e.blockNumber))];
+    await Promise.all(uniqueTransferBlocks.map(bn => getBlockTimestamp(bn)));
+    const last24hTransfers = transferEvents.filter(e => blockTimestampCache[e.blockNumber] >= cutoffTs);
+
+    const settlementNet = {};
+    for (const e of lastSettlementTrades) {
+      const { producer, consumer, amountPaid } = e.returnValues;
+      settlementNet[producer] = (settlementNet[producer] || 0n) + BigInt(amountPaid);
+      settlementNet[consumer] = (settlementNet[consumer] || 0n) - BigInt(amountPaid);
+    }
+
+    const balanceNet24h = {};
+    for (const e of last24hTransfers) {
+      const { from, to, value } = e.returnValues;
+      balanceNet24h[from] = (balanceNet24h[from] || 0n) - BigInt(value);
+      balanceNet24h[to] = (balanceNet24h[to] || 0n) + BigInt(value);
+    }
+
+    const entries = [
+      ...households.map(a => ({ addr: a, type: "Household" })),
+      ...producers.map(a => ({ addr: a, type: "Producer" }))
+    ];
+    await renderAccountsOverview(entries, stablecoinR, settlementNet, balanceNet24h, decimals, symbol);
+
+  } catch (e) {
+    console.error(e);
+    $("lookbackStatus").innerHTML = `<span class="bad">Error: ${e.message} — some RPC providers cap the block range per eth_getLogs request; try a smaller lookback.</span>`;
+    $("lastSettlementStatus").textContent = "";
+    $("accountsStatus").textContent = "";
+    $("flowStatus").textContent = "";
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+//  Last settlement
+// ─────────────────────────────────────────────────────────────
+
+function renderLastSettlement(slotStr, trades, decimals, symbol) {
+  $("lastSlotLabel").textContent = `— slot ${slotStr}`;
+  const tbody = document.querySelector("#lastSettlementTable tbody");
+  tbody.innerHTML = "";
+
+  if (trades.length === 0) {
+    $("lastSettlementStats").innerHTML = "";
+    $("lastSettlementStatus").innerHTML = `<span class="muted">No EnergyTraded events for slot ${slotStr} within the current lookback window (widen it above if the last settlement is older).</span>`;
+    return;
+  }
+
+  let totalEnergyWh = 0n, totalPaid = 0n;
+  const net = {};
+  for (const t of trades) {
+    const { producer, consumer, energyWh, amountPaid } = t.returnValues;
+    totalEnergyWh += BigInt(energyWh);
+    totalPaid += BigInt(amountPaid);
+    net[producer] = (net[producer] || 0n) + BigInt(amountPaid);
+    net[consumer] = (net[consumer] || 0n) - BigInt(amountPaid);
+  }
+
+  $("lastSettlementStats").innerHTML = `
+    <div class="stat"><div class="label">Trades</div><div class="value">${trades.length}</div></div>
+    <div class="stat"><div class="label">Energy settled</div><div class="value">${fmtToken(totalEnergyWh, 3)} kWh</div></div>
+    <div class="stat"><div class="label">Total paid</div><div class="value">${fmtToken(totalPaid, decimals)} ${symbol}</div></div>
+  `;
+
+  const rows = Object.entries(net).sort((a, b) => (b[1] > a[1] ? 1 : -1));
+  for (const [addr, amount] of rows) {
+    const tr = document.createElement("tr");
+    const role = amount > 0n ? "Producer (received)" : "Consumer (paid)";
+    tr.innerHTML = `<td>${addrCell(addr)}</td><td>${role}</td><td>${fmtSigned(amount, decimals, symbol)}</td>`;
+    tbody.appendChild(tr);
+  }
+  $("lastSettlementStatus").innerHTML = `<span class="ok">${rows.length} account(s) involved in slot ${slotStr}.</span>`;
+}
+
+// ─────────────────────────────────────────────────────────────
+//  Accounts overview
+// ─────────────────────────────────────────────────────────────
+
+async function renderAccountsOverview(entries, stablecoinR, settlementNet, balanceNet24h, decimals, symbol) {
+  const tbody = document.querySelector("#accountsTable tbody");
+  tbody.innerHTML = "";
+
+  if (entries.length === 0) {
+    $("accountsStatus").innerHTML = `<span class="muted">No households or producers registered.</span>`;
+    return;
+  }
+
+  const rows = await Promise.all(entries.map(async (e) => {
+    let balance = null;
+    try { balance = await stablecoinR.methods.balanceOf(e.addr).call(); } catch (err) {}
+    return {
+      ...e,
+      balance,
+      settlementChange: settlementNet[e.addr] || 0n,
+      change24h: balanceNet24h[e.addr] || 0n
+    };
+  }));
+
+  for (const r of rows) {
+    const tr = document.createElement("tr");
+    const balanceTxt = r.balance !== null ? fmtToken(BigInt(r.balance), decimals) + " " + symbol : "?";
+    tr.innerHTML = `
+      <td>${addrCell(r.addr)}</td>
+      <td>${r.type}</td>
+      <td>${balanceTxt}</td>
+      <td>${fmtSigned(r.settlementChange, decimals, symbol)}</td>
+      <td>${fmtSigned(r.change24h, decimals, symbol)}</td>
+    `;
+    tbody.appendChild(tr);
+  }
+  $("accountsStatus").innerHTML = `<span class="ok">${rows.length} account(s).</span>`;
+}
+
+// ─────────────────────────────────────────────────────────────
+//  Energy flow (last 24h)
+// ─────────────────────────────────────────────────────────────
+
+function renderFlowTable(trades, decimals, symbol) {
+  const tbody = document.querySelector("#flowTable tbody");
+  tbody.innerHTML = "";
+
+  if (trades.length === 0) {
+    $("flowStatus").innerHTML = `<span class="muted">No energy trades in the last 24h within the current lookback window.</span>`;
+    return;
+  }
+
+  const pairs = {};
+  for (const t of trades) {
+    const { producer, consumer, energyWh, amountPaid } = t.returnValues;
+    const key = producer + "→" + consumer;
+    if (!pairs[key]) pairs[key] = { producer, consumer, energyWh: 0n, amountPaid: 0n, count: 0 };
+    pairs[key].energyWh += BigInt(energyWh);
+    pairs[key].amountPaid += BigInt(amountPaid);
+    pairs[key].count += 1;
+  }
+
+  const list = Object.values(pairs).sort((a, b) => (b.energyWh > a.energyWh ? 1 : -1));
+  const maxWh = list.reduce((m, p) => p.energyWh > m ? p.energyWh : m, 0n);
+
+  for (const p of list) {
+    const tr = document.createElement("tr");
+    const pct = maxWh > 0n ? Number((p.energyWh * 1000n) / maxWh) / 10 : 0;
+    tr.innerHTML = `
+      <td>${addrCell(p.producer)}</td>
+      <td>${addrCell(p.consumer)}</td>
+      <td>${fmtToken(p.energyWh, 3)} kWh</td>
+      <td><div class="bar-wrap"><div class="bar-track"><div class="bar-fill" style="width:${pct}%;"></div></div></div></td>
+      <td>${fmtToken(p.amountPaid, decimals)} ${symbol}</td>
+      <td>${p.count}</td>
+    `;
+    tbody.appendChild(tr);
+  }
+  $("flowStatus").innerHTML = `<span class="ok">${list.length} producer/consumer pair(s), ${trades.length} trade(s) total.</span>`;
+}
+
+// ─────────────────────────────────────────────────────────────
+//  Init
+// ─────────────────────────────────────────────────────────────
+
+async function init() {
+  setupNav();
+  readWeb3 = new Web3(new Web3.providers.HttpProvider(RPC_URL));
+
+  cfg.oracle = readParamFromUrl("oracle") || "";
+  cfg.market = readParamFromUrl("market") || "";
+  applyConfigToForm();
+
+  if (!cfg.oracle || !cfg.market) {
+    $("missingParamsBanner").style.display = "block";
+    return;
+  }
+
+  try {
+    cfg.oracle = Web3.utils.toChecksumAddress(cfg.oracle);
+    cfg.market = Web3.utils.toChecksumAddress(cfg.market);
+  } catch (e) {
+    $("cfgStatus").innerHTML = `<span class="bad">Invalid address in URL params.</span>`;
+    return;
+  }
+
+  await fetchDerivedAddresses();
+  applyConfigToForm();
+  await refreshAll();
+}
+
+init();
+</script>
+
+</body>
+</html>

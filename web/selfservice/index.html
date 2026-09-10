@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Energy Trading — Self-Service</title>
+<script src="https://cdn.jsdelivr.net/npm/web3@1.10.4/dist/web3.min.js"></script>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, Segoe UI, Roboto, sans-serif;
+    background: #0f1115;
+    color: #e6e6e6;
+    margin: 0;
+    padding: 24px;
+  }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h2 { font-size: 15px; margin: 0 0 10px; color: #9fd3ff; }
+  .sub { color: #888; font-size: 13px; margin-bottom: 16px; }
+  .topnav { display: flex; gap: 4px; margin-bottom: 18px; border-bottom: 1px solid #22262f; padding-bottom: 12px; }
+  .topnav a {
+    color: #9fd3ff; text-decoration: none; font-size: 13px;
+    padding: 6px 12px; border-radius: 6px; background: #171a21; border: 1px solid #2a2e38;
+  }
+  .topnav a.active { background: #2b6cb0; color: #fff; border-color: #2b6cb0; }
+  .topnav a:hover:not(.active) { background: #1c2028; }
+  .panel {
+    background: #171a21;
+    border: 1px solid #2a2e38;
+    border-radius: 8px;
+    padding: 16px 18px;
+    margin-bottom: 16px;
+  }
+  .config-grid {
+    display: grid;
+    grid-template-columns: 160px 1fr;
+    gap: 8px 12px;
+    align-items: center;
+  }
+  .config-grid label { font-size: 12px; color: #aaa; }
+  input[type=text], select {
+    width: 100%;
+    background: #0f1115;
+    border: 1px solid #333944;
+    color: #e6e6e6;
+    border-radius: 4px;
+    padding: 6px 8px;
+    font-family: ui-monospace, Consolas, monospace;
+    font-size: 12px;
+  }
+  input[readonly] { color: #999; background: #14161b; }
+  button {
+    background: #2b6cb0;
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    padding: 8px 16px;
+    font-size: 13px;
+    cursor: pointer;
+    margin-top: 10px;
+    margin-right: 8px;
+  }
+  button:hover { background: #3a7fca; }
+  button:disabled { background: #333944; cursor: not-allowed; }
+  .kv { display: grid; grid-template-columns: 220px 1fr; gap: 4px 12px; font-size: 13px; }
+  .kv div.k { color: #9fd3ff; }
+  .kv div.v { font-family: ui-monospace, Consolas, monospace; word-break: break-all; }
+  .ok { color: #4ade80; }
+  .bad { color: #f87171; }
+  .muted { color: #666; }
+  .log { font-family: ui-monospace, Consolas, monospace; font-size: 12px; white-space: pre-wrap; margin-top: 10px; line-height: 1.5; }
+  .log .step-ok { color: #4ade80; }
+  .log .step-bad { color: #f87171; }
+  .log .step-info { color: #9fd3ff; }
+  #walletBar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .hint { color: #888; font-size: 12px; margin-bottom: 8px; }
+  .banner { padding: 10px 14px; border-radius: 6px; font-size: 13px; margin-bottom: 16px; }
+  .banner.warn { background: #2a2110; border: 1px solid #4a3b14; color: #fbbf24; }
+</style>
+</head>
+<body>
+
+<div class="topnav">
+  <a href="#" id="navHome">Home</a>
+  <a href="#" id="navAdmin">Admin</a>
+  <a href="#" id="navSelfservice" class="active">Self-Service</a>
+  <a href="#" id="navTransactions">Transactions</a>
+  <a href="#" id="navOverview">Overview</a>
+</div>
+
+<h1>Energy Trading — Self-Service</h1>
+<div class="sub">
+  Grant the P2PEnergyMarket contract an ERC-20 allowance on your stablecoin so settleSlot()
+  can transfer payments on your behalf when you're a net consumer.
+</div>
+
+<div id="missingParamsBanner" class="banner warn" style="display:none;">
+  Missing <code>oracle</code> and/or <code>market</code> URL parameter. Enter both below and
+  click "Load" — there are no built-in defaults, this page only works with an explicit deployment.
+</div>
+
+<div class="panel">
+  <h2>Deployment</h2>
+  <div class="config-grid">
+    <label>OracleStorage</label>
+    <input type="text" id="cfgOracle" placeholder="0x...">
+
+    <label>P2PEnergyMarket</label>
+    <input type="text" id="cfgMarket" placeholder="0x...">
+
+    <label>Stablecoin</label>
+    <input type="text" id="cfgStablecoin" readonly placeholder="(auto, via market.stablecoin())">
+  </div>
+  <button onclick="loadConfig()">Load</button>
+  <div id="cfgStatus" class="muted" style="margin-top:6px; font-size:12px;"></div>
+</div>
+
+<div class="panel">
+  <h2>Wallet</h2>
+  <div id="walletBar">
+    <button onclick="connectWallet()">Connect MetaMask</button>
+    <span id="walletAddr" class="muted">Not connected</span>
+  </div>
+  <div id="signerRow" style="margin-top:8px; display:none;">
+    <label style="font-size:12px; color:#aaa; margin-right:8px;">Sign as:</label>
+    <select id="signerSelect" onchange="onSignerChange()" style="width:auto; display:inline-block; min-width:220px;"></select>
+  </div>
+  <div id="walletStatus" class="muted" style="margin-top:6px; font-size:12px;"></div>
+</div>
+
+<div class="panel">
+  <h2>Stablecoin allowance</h2>
+  <div class="kv" id="approveKv" style="margin-bottom:10px;"></div>
+  <label style="font-size:12px; color:#aaa;">Amount (in tokens, blank = unlimited)</label>
+  <input type="text" id="approveAmount" placeholder="e.g. 1000, or leave blank">
+  <button onclick="approveMarket()">Approve</button>
+  <div id="approveLog" class="log"></div>
+</div>
+
+<script>
+const RPC_URL = "https://ethereum-sepolia-rpc.publicnode.com";
+
+const MARKET_ABI = [
+  {"inputs":[],"name":"stablecoin","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"}
+];
+
+const ERC20_ABI = [
+  {"inputs":[{"internalType":"address","name":"spender","type":"address"},{"internalType":"uint256","name":"amount","type":"uint256"}],"name":"approve","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"nonpayable","type":"function"},
+  {"inputs":[{"internalType":"address","name":"owner","type":"address"},{"internalType":"address","name":"spender","type":"address"}],"name":"allowance","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[{"internalType":"address","name":"account","type":"address"}],"name":"balanceOf","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"decimals","outputs":[{"internalType":"uint8","name":"","type":"uint8"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"symbol","outputs":[{"internalType":"string","name":"","type":"string"}],"stateMutability":"view","type":"function"}
+];
+
+const MAX_UINT256 = (2n ** 256n - 1n).toString();
+const $ = id => document.getElementById(id);
+const short = a => a ? a.slice(0,6) + "…" + a.slice(-4) : "-";
+
+let cfg = { oracle: "", market: "", stablecoin: "" };
+let readWeb3, walletWeb3;
+let account = null;
+
+function readParamFromUrl(name) {
+  try {
+    const v = new URLSearchParams(window.location.search).get(name);
+    return v ? v.trim() : null;
+  } catch (e) { return null; }
+}
+
+function syncParamsToUrl(params) {
+  try {
+    const url = new URL(window.location.href);
+    for (const [key, value] of Object.entries(params)) {
+      if (value) url.searchParams.set(key, value);
+      else url.searchParams.delete(key);
+    }
+    history.replaceState(null, "", url.toString());
+  } catch (e) {
+    console.warn("syncParamsToUrl failed:", e.message);
+  }
+}
+
+function setupNav() {
+  const qs = window.location.search;
+  $("navHome").href = "../index.html" + qs;
+  $("navAdmin").href = "../admin/index.html" + qs;
+  $("navTransactions").href = "../transactions/index.html" + qs;
+  $("navOverview").href = "../overview/index.html" + qs;
+}
+
+function applyConfigToForm() {
+  $("cfgOracle").value = cfg.oracle || "";
+  $("cfgMarket").value = cfg.market || "";
+  $("cfgStablecoin").value = cfg.stablecoin || "";
+}
+
+async function loadConfig() {
+  const oracleRaw = $("cfgOracle").value.trim();
+  const marketRaw = $("cfgMarket").value.trim();
+  let oracle, market;
+  try { oracle = Web3.utils.toChecksumAddress(oracleRaw); }
+  catch (e) { $("cfgStatus").innerHTML = `<span class="bad">Invalid OracleStorage address.</span>`; return; }
+  try { market = Web3.utils.toChecksumAddress(marketRaw); }
+  catch (e) { $("cfgStatus").innerHTML = `<span class="bad">Invalid P2PEnergyMarket address.</span>`; return; }
+
+  cfg.oracle = oracle;
+  cfg.market = market;
+  syncParamsToUrl({ oracle: cfg.oracle, market: cfg.market });
+  $("missingParamsBanner").style.display = "none";
+  $("cfgStatus").textContent = "Loading…";
+
+  await fetchDerivedAddresses();
+  applyConfigToForm();
+  if (account) initWalletContracts();
+  if (window._accounts && window._accounts.length > 0) await refreshAccountsData();
+}
+
+async function fetchDerivedAddresses() {
+  const marketR = new readWeb3.eth.Contract(MARKET_ABI, cfg.market);
+  try {
+    cfg.stablecoin = await marketR.methods.stablecoin().call();
+    $("cfgStatus").innerHTML = `<span class="ok">Loaded.</span>`;
+  } catch (e) {
+    cfg.stablecoin = "";
+    $("cfgStatus").innerHTML = `<span class="bad">Could not read stablecoin() from market: ${e.message}</span>`;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+//  Wallet
+// ─────────────────────────────────────────────────────────────
+
+async function connectWallet() {
+  if (!window.ethereum) { alert("MetaMask not found. Please install it."); return; }
+  try {
+    const accounts = await window.ethereum.request({ method: "eth_requestAccounts" });
+    window._accounts = accounts;
+    account = accounts[0];
+    walletWeb3 = new Web3(window.ethereum);
+    initWalletContracts();
+    renderAccountSelector(accounts);
+    $("walletAddr").innerHTML = `<span class="ok">${accounts.length} account(s) connected</span>`;
+    await refreshAccountsData();
+  } catch (e) {
+    console.error(e);
+    $("walletStatus").innerHTML = `<span class="bad">Connection failed: ${e.message}</span>`;
+  }
+}
+
+function renderAccountSelector(accounts) {
+  const sel = $("signerSelect");
+  sel.innerHTML = accounts.map(a => `<option value="${a}">${short(a)}</option>`).join("");
+  sel.value = account;
+  $("signerRow").style.display = accounts.length > 0 ? "block" : "none";
+}
+
+function onSignerChange() {
+  account = $("signerSelect").value;
+  updateApproveKv();
+}
+
+function initWalletContracts() {
+  if (!cfg.stablecoin) return;
+  window.stablecoinW = new walletWeb3.eth.Contract(ERC20_ABI, cfg.stablecoin);
+}
+
+if (window.ethereum) {
+  window.ethereum.on("accountsChanged", async (accounts) => {
+    window._accounts = accounts;
+    if (accounts.length === 0) {
+      account = null;
+      $("walletAddr").textContent = "Not connected";
+      $("signerRow").style.display = "none";
+      return;
+    }
+    if (!accounts.includes(account)) account = accounts[0];
+    renderAccountSelector(accounts);
+    $("walletAddr").innerHTML = `<span class="ok">${accounts.length} account(s) connected</span>`;
+    await refreshAccountsData();
+  });
+}
+
+async function sendTx(methodCall, fromAccount) {
+  let estimated;
+  try {
+    estimated = await methodCall.estimateGas({ from: fromAccount });
+  } catch (e) {
+    throw new Error(`Simulation failed (action would revert): ${e.message}`);
+  }
+  const gas = Math.min(Math.ceil(Number(estimated) * 1.3), 1000000);
+  const sendOpts = { from: fromAccount, gas };
+  try {
+    sendOpts.nonce = await walletWeb3.eth.getTransactionCount(fromAccount, "pending");
+  } catch (e) {
+    console.warn("Could not fetch fresh nonce, leaving it to MetaMask:", e.message);
+  }
+  return methodCall.send(sendOpts);
+}
+
+// ─────────────────────────────────────────────────────────────
+//  Balance / allowance
+// ─────────────────────────────────────────────────────────────
+
+async function refreshAccountsData() {
+  if (!window._accounts || window._accounts.length === 0 || !cfg.stablecoin) return;
+  const stablecoinR = new readWeb3.eth.Contract(ERC20_ABI, cfg.stablecoin);
+
+  if (window._decimals === undefined) {
+    try {
+      window._decimals = Number(await stablecoinR.methods.decimals().call());
+      window._symbol = await stablecoinR.methods.symbol().call();
+    } catch (e) {
+      console.warn("Could not load decimals/symbol:", e.message);
+    }
+  }
+
+  const perAccount = await Promise.all(window._accounts.map(async (acct) => {
+    let balance = null, allowance = null;
+    try { balance = await stablecoinR.methods.balanceOf(acct).call(); } catch (e) {}
+    try { allowance = await stablecoinR.methods.allowance(acct, cfg.market).call(); } catch (e) {}
+    return { address: acct, balance, allowance };
+  }));
+
+  window._perAccountData = perAccount;
+  updateApproveKv();
+}
+
+function updateApproveKv() {
+  const rows = window._perAccountData;
+  const kv = $("approveKv");
+  kv.innerHTML = "";
+  if (!rows || !account) return;
+  const r = rows.find(x => x.address.toLowerCase() === account.toLowerCase());
+  if (!r) { kvRow(kv, "Balance", "?"); kvRow(kv, "Current allowance to market", "?"); return; }
+  const decimals = window._decimals;
+  const symbol = window._symbol || "";
+  kvRow(kv, "Balance", (r.balance !== null && decimals != null) ? fmtToken(r.balance, decimals) + " " + symbol : "?");
+  kvRow(kv, "Current allowance to market", (r.allowance !== null && decimals != null) ? fmtAllowance(r.allowance, decimals, symbol) : "?");
+}
+
+function kvRow(container, key, value) {
+  const k = document.createElement("div"); k.className = "k"; k.textContent = key;
+  const v = document.createElement("div"); v.className = "v"; v.textContent = value;
+  container.appendChild(k); container.appendChild(v);
+}
+
+function fmtToken(raw, decimals) {
+  return (Number(BigInt(raw)) / 10 ** Number(decimals)).toString();
+}
+
+function fmtAllowance(raw, decimals, symbol) {
+  if (raw === MAX_UINT256) return "Unlimited";
+  return fmtToken(raw, decimals) + " " + symbol;
+}
+
+function toTokenUnits(amountStr, decimals) {
+  amountStr = amountStr.trim();
+  const [whole, frac = ""] = amountStr.split(".");
+  const fracPadded = (frac + "0".repeat(decimals)).slice(0, decimals);
+  const wholeDigits = whole === "" ? "0" : whole;
+  return BigInt(wholeDigits) * (10n ** BigInt(decimals)) + BigInt(fracPadded || "0");
+}
+
+function log(elId, msg, cls) {
+  const el = $(elId);
+  const line = document.createElement("div");
+  if (cls) line.className = cls;
+  line.textContent = msg;
+  el.appendChild(line);
+}
+
+// ─────────────────────────────────────────────────────────────
+//  Approve
+// ─────────────────────────────────────────────────────────────
+
+async function approveMarket() {
+  if (!account) { alert("Please connect your wallet first."); return; }
+  if (!window.stablecoinW) { alert("Stablecoin address not loaded yet."); return; }
+  $("approveLog").innerHTML = "";
+
+  const amountRaw = $("approveAmount").value.trim();
+  let amountUnits;
+  try {
+    if (amountRaw === "") {
+      amountUnits = MAX_UINT256;
+      log("approveLog", "No amount given -> unlimited approve.", "step-info");
+    } else {
+      const decimals = window._decimals ?? 6;
+      amountUnits = toTokenUnits(amountRaw, decimals).toString();
+      log("approveLog", `Amount: ${amountRaw} ${window._symbol || ""} (${amountUnits} smallest units)`, "step-info");
+    }
+
+    log("approveLog", "Sending approve() ...", "step-info");
+    await sendTx(window.stablecoinW.methods.approve(cfg.market, amountUnits), account);
+    log("approveLog", "✓ Done.", "step-ok");
+    await refreshAccountsData();
+  } catch (e) {
+    log("approveLog", `✗ Failed: ${e.message}`, "step-bad");
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+//  Init
+// ─────────────────────────────────────────────────────────────
+
+async function init() {
+  setupNav();
+  readWeb3 = new Web3(new Web3.providers.HttpProvider(RPC_URL));
+
+  cfg.oracle = readParamFromUrl("oracle") || "";
+  cfg.market = readParamFromUrl("market") || "";
+  applyConfigToForm();
+
+  if (!cfg.oracle || !cfg.market) {
+    $("missingParamsBanner").style.display = "block";
+    return;
+  }
+
+  try {
+    cfg.oracle = Web3.utils.toChecksumAddress(cfg.oracle);
+    cfg.market = Web3.utils.toChecksumAddress(cfg.market);
+  } catch (e) {
+    $("cfgStatus").innerHTML = `<span class="bad">Invalid address in URL params.</span>`;
+    return;
+  }
+
+  await fetchDerivedAddresses();
+  applyConfigToForm();
+}
+
+init();
+</script>
+
+</body>
+</html>

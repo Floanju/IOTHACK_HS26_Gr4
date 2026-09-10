@@ -129,6 +129,7 @@
   .badge.charge { background: rgba(74, 222, 128, 0.15); color: #4ade80; }
   .badge.discharge { background: rgba(251, 191, 36, 0.15); color: #fbbf24; }
   .badge.idle { background: rgba(154, 160, 171, 0.15); color: #9aa0ab; }
+  .badge.household { background: rgba(159, 211, 255, 0.15); color: #9fd3ff; }
 
   .chart-card { margin-bottom: 12px; }
   .chart-card summary { font-size: 13px; color: #e6e6e6; cursor: pointer; list-style: none; }
@@ -276,7 +277,7 @@
   <div id="batterySocCharts"></div>
 
   <details id="batteryEventsDetails" class="panel chart-card" style="margin-top:14px;">
-    <summary>Decision log — charge/discharge messages</summary>
+    <summary id="batteryEventsSummary">Decision log — charge/discharge messages</summary>
     <table id="batteryEventsTable">
       <thead>
         <tr>
@@ -439,9 +440,16 @@ const INCENTIVE_ABI = [
 
 const ACTION_NAMES = ["IDLE", "CHARGE", "DISCHARGE"];
 const ACTION_CLASS = ["idle", "charge", "discharge"];
-// Background shading behind the SoC chart, keyed by action index (1=CHARGE, 2=DISCHARGE).
-// IDLE (0) has no entry, so it's left unshaded.
-const ACTION_BAND_COLOR = { 1: "rgba(74, 222, 128, 0.16)", 2: "rgba(248, 113, 113, 0.16)" };
+// Shared charge/idle/discharge palette for the SoC chart — same colors as the
+// .badge classes above, so the line, its background shading and the decision
+// log badges all agree: green while charging, gray while idle, orange/amber
+// while discharging.
+const ACTION_LINE_COLOR = { 0: "#9aa0ab", 1: "#4ade80", 2: "#fbbf24" };
+const ACTION_BG_COLOR = {
+  0: "rgba(154, 160, 171, 0.12)",
+  1: "rgba(74, 222, 128, 0.16)",
+  2: "rgba(251, 191, 36, 0.16)"
+};
 
 const $ = id => document.getElementById(id);
 const short = a => a ? a.slice(0,6) + "…" + a.slice(-4) : "-";
@@ -624,12 +632,28 @@ function syncParamsToUrl(params) {
   }
 }
 
+// The nav targets carry the current oracle/market/etc. config over as URL
+// params, same as this page. window.location.search can change after load
+// (e.g. via the "Load" button, which rewrites it with history.replaceState),
+// so the href is set on click using the CURRENT search string rather than a
+// value captured once here — otherwise switching views after loading a
+// different config would silently carry over stale, cached params.
 function setupNav() {
-  const qs = window.location.search;
-  $("navHome").href = "../index.html" + qs;
-  $("navAdmin").href = "../admin/index.html" + qs;
-  $("navSelfservice").href = "../selfservice/index.html" + qs;
-  $("navTransactions").href = "../transactions/index.html" + qs;
+  const navTargets = {
+    navHome: "../index.html",
+    navAdmin: "../admin/index.html",
+    navSelfservice: "../selfservice/index.html",
+    navTransactions: "../transactions/index.html"
+  };
+  for (const [id, path] of Object.entries(navTargets)) {
+    const link = $(id);
+    if (!link) continue;
+    link.href = path + window.location.search; // best-effort initial value (hover/open-in-new-tab)
+    link.addEventListener("click", (e) => {
+      e.preventDefault();
+      window.location.href = path + window.location.search;
+    });
+  }
 }
 
 function applyConfigToForm() {
@@ -837,7 +861,10 @@ function renderHouseholdStats(activeHouseholds, avgConsumption, avgProduction) {
 // onChainProducers = market.getAllProducers() (e.g. the grid operator, registered
 // via registerProducer() rather than registerHousehold()) — shown in the same
 // table as households, but with grid buy/sell price instead of the P2P price
-// and without meter/battery data (producers don't report to the oracle).
+// and without battery data. A producer doesn't report its own meter reading
+// to the oracle, so its consumption/production is instead DERIVED from the
+// combined net of the regular households (see the comment above the loop
+// below) rather than read from the chain.
 async function loadHouseholds(oracle, market, knownHouseholds, onChainAddresses, onChainProducers, prices) {
   const tbody = document.querySelector("#householdsTable tbody");
   tbody.innerHTML = "";
@@ -878,6 +905,29 @@ async function loadHouseholds(oracle, market, knownHouseholds, onChainAddresses,
       return { ...h, oracleReg, marketReg, meter, batt, buyPrice, sellPrice };
     }));
 
+    // The grid only shows up as a counterparty once households are net long or
+    // net short — it doesn't have its own meter reading. So its consumption/
+    // production is derived from the combined net of the regular households'
+    // latest readings (the same numbers already shown in their own rows):
+    //   net = Σ production − Σ consumption
+    //   net > 0 (households collectively over-produce) -> the surplus flows
+    //     OUT to the grid, i.e. the grid "consumes" it.
+    //   net < 0 (households collectively fall short) -> the shortfall flows
+    //     IN from the grid, i.e. the grid "produces" it.
+    // If there are multiple registered producers, the same derived figure is
+    // shown on each row — the split between them isn't observable from here,
+    // only the on-chain settlement (_matchAndSettle) actually decides that.
+    const householdRows = rows.filter(r => r.type === "household");
+    let netWh = 0;
+    let latestHouseholdTs = 0;
+    for (const h of householdRows) {
+      netWh += Number(h.meter.productionWh) - Number(h.meter.consumptionWh);
+      latestHouseholdTs = Math.max(latestHouseholdTs, Number(h.meter.timestamp));
+    }
+    const gridConsumptionWh = netWh > 0 ? netWh : 0;
+    const gridProductionWh = netWh < 0 ? -netWh : 0;
+    const gridTitle = 'title="Derived from the net production/consumption of the registered households — not read from the oracle."';
+
     for (const r of rows) {
       const isProducer = r.type === "producer";
       const dash = '<span class="muted">-</span>';
@@ -885,12 +935,12 @@ async function loadHouseholds(oracle, market, knownHouseholds, onChainAddresses,
       tr.innerHTML = `
         <td>${r.id}</td>
         <td>${addrCell(r.address)}</td>
-        <td>${isProducer ? '<span class="badge idle">Grid operator</span>' : "Household"}</td>
+        <td>${isProducer ? '<span class="badge idle">Grid operator</span>' : '<span class="badge household">Household</span>'}</td>
         <td class="${r.oracleReg ? "ok" : "bad"}">${r.oracleReg ? "✓" : "✗"}</td>
         <td class="${r.marketReg ? "ok" : "bad"}">${r.marketReg ? "✓" : "✗"}</td>
-        <td>${isProducer ? dash : r.meter.consumptionWh}</td>
-        <td>${isProducer ? dash : r.meter.productionWh}</td>
-        <td>${isProducer ? dash : fmtTs(r.meter.timestamp)}</td>
+        <td ${isProducer ? gridTitle : ""}>${isProducer ? gridConsumptionWh : r.meter.consumptionWh}</td>
+        <td ${isProducer ? gridTitle : ""}>${isProducer ? gridProductionWh : r.meter.productionWh}</td>
+        <td>${isProducer ? (latestHouseholdTs ? fmtTs(latestHouseholdTs) : dash) : fmtTs(r.meter.timestamp)}</td>
         <td>${!isProducer && r.batt.capacityWh > 0 ? r.batt.socPercent + "%" : "-"}</td>
         <td>${!isProducer && r.batt.capacityWh > 0 ? r.batt.capacityWh : "-"}</td>
         <td>${wei6(r.buyPrice)}</td>
@@ -1326,6 +1376,7 @@ async function loadBatteryManager(web3, oracle, battMgrAddress, knownHouseholds,
     document.querySelector("#batteryEventsTable tbody").innerHTML = "";
     $("batteryEventsStatus").textContent = "";
     $("batteryEventsDetails").open = false;
+    $("batteryEventsSummary").textContent = "Decision log — charge/discharge messages";
     return;
   }
 
@@ -1452,7 +1503,10 @@ async function loadBatteryEvents() {
       .sort((a, b) => a.timestamp - b.timestamp);
 
     renderBatterySocCharts(socEnriched, idByAddress, enriched);
-    $("batteryEventsDetails").open = enriched.length > 0;
+    // Collapsed by default — the transaction/decision log is shown on demand
+    // (click to expand) rather than dumped into view right after loading.
+    $("batteryEventsSummary").textContent =
+      `Decision log — charge/discharge messages (${enriched.length})`;
 
     const parts = [];
     parts.push(enriched.length === 0
@@ -1527,39 +1581,82 @@ function buildSocCard(id) {
   const legend = document.createElement("div");
   legend.className = "chart-legend";
   legend.innerHTML = `
-    <span><span class="dot" style="background:#4ade80"></span>Charging</span>
-    <span><span class="dot" style="background:#f87171"></span>Discharging</span>
+    <span><span class="dot" style="background:${ACTION_LINE_COLOR[1]}"></span>Charging</span>
+    <span><span class="dot" style="background:${ACTION_LINE_COLOR[0]}"></span>Idle</span>
+    <span><span class="dot" style="background:${ACTION_LINE_COLOR[2]}"></span>Discharging</span>
   `;
   card.appendChild(legend);
 
   return { card, svg };
 }
 
-// Charge/discharge action holds from one DecisionMade event until the next
-// (or until tMax for the last one) — turned into background bands for initChart().
+// Action holds from one DecisionMade event until the next (or until tMax for
+// the last one), fully tiling [tMin, tMax] — any gap before the first known
+// decision, or between two decisions, defaults to IDLE (action 0) rather than
+// being left uncovered, so the whole chart width is always shaded/colored.
 function buildActionBands(actionEvents, tMin, tMax) {
-  if (!actionEvents || actionEvents.length === 0) return [];
-  const sorted = actionEvents.slice().sort((a, b) => a.timestamp - b.timestamp);
+  const sorted = (actionEvents || []).slice().sort((a, b) => a.timestamp - b.timestamp);
   const bands = [];
+  let cursor = tMin;
   for (let i = 0; i < sorted.length; i++) {
-    const color = ACTION_BAND_COLOR[sorted[i].action];
-    if (!color) continue; // IDLE — left unshaded
-    const from = Math.max(tMin, sorted[i].timestamp);
-    const to = Math.min(tMax, i + 1 < sorted.length ? sorted[i + 1].timestamp : tMax);
-    if (to > from) bands.push({ from, to, color });
+    const start = Math.max(tMin, sorted[i].timestamp);
+    if (start > cursor) bands.push({ from: cursor, to: start, action: 0 }); // IDLE gap
+    const end = Math.min(tMax, i + 1 < sorted.length ? sorted[i + 1].timestamp : tMax);
+    if (end > start) bands.push({ from: start, to: end, action: sorted[i].action });
+    cursor = Math.max(cursor, end);
   }
+  if (cursor < tMax) bands.push({ from: cursor, to: tMax, action: 0 }); // trailing IDLE gap
   return bands;
+}
+
+// Which action band (see buildActionBands()) a given timestamp falls into —
+// bands always tile [tMin, tMax] with no gaps, so this always resolves.
+function actionAtTime(t, bands) {
+  for (const b of bands) {
+    if (t >= b.from && t <= b.to) return b.action;
+  }
+  return 0; // IDLE fallback, shouldn't be reached given full tiling
+}
+
+// Splits an already-contiguous run of SoC points into per-action sub-runs, so
+// the line itself can be drawn in the matching charge/idle/discharge color
+// (Android-style) rather than one flat color. The boundary point is repeated
+// at the start of the next sub-run so the strokes still connect visually.
+function splitByAction(points, bands) {
+  if (points.length === 0) return [];
+  const runs = [];
+  let current = [points[0]];
+  let currentAction = actionAtTime(points[0].timestamp, bands);
+  for (let i = 1; i < points.length; i++) {
+    const action = actionAtTime(points[i].timestamp, bands);
+    if (action !== currentAction) {
+      current.push(points[i]);
+      runs.push({ action: currentAction, points: current });
+      current = [points[i]];
+      currentAction = action;
+    } else {
+      current.push(points[i]);
+    }
+  }
+  runs.push({ action: currentAction, points: current });
+  return runs;
 }
 
 function drawSocChart(svg, events, actionEvents) {
   const tMin = events[0].timestamp, tMax = events[events.length - 1].timestamp;
   const bands = buildActionBands(actionEvents, tMin, tMax);
-  const { xScale, yScale, yBounds, box } = initChart(svg, tMin, tMax, 0, 100, bands);
-  const segments = splitContiguous(events);
+  const bgBands = bands.map(b => ({ from: b.from, to: b.to, color: ACTION_BG_COLOR[b.action] }));
+  const { xScale, yScale, yBounds, box } = initChart(svg, tMin, tMax, 0, 100, bgBands);
+  const gapSegments = splitContiguous(events);
 
-  drawLineSeries(svg, segments, xScale, yScale, yBounds, "soc", "#a78bfa");
+  for (const seg of gapSegments) {
+    for (const run of splitByAction(seg, bands)) {
+      drawLineSeries(svg, [run.points], xScale, yScale, yBounds, "soc", ACTION_LINE_COLOR[run.action]);
+    }
+  }
+
   attachHoverTooltip(svg, xScale, yScale, box, events, [
-    { key: "soc", color: "#a78bfa", label: "SoC", unit: "%" }
+    { key: "soc", color: "#e6e6e6", label: "SoC", unit: "%" }
   ]);
 }
 

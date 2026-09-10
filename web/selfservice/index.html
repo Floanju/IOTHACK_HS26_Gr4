@@ -180,12 +180,27 @@ function syncParamsToUrl(params) {
   }
 }
 
+// window.location.search can change after load (e.g. via the "Load" button,
+// which rewrites it with history.replaceState), so the href is set on click
+// using the CURRENT search string rather than a value captured once here —
+// otherwise switching views after loading a different config would silently
+// carry over stale, cached params.
 function setupNav() {
-  const qs = window.location.search;
-  $("navHome").href = "../index.html" + qs;
-  $("navAdmin").href = "../admin/index.html" + qs;
-  $("navTransactions").href = "../transactions/index.html" + qs;
-  $("navOverview").href = "../overview/index.html" + qs;
+  const navTargets = {
+    navHome: "../index.html",
+    navAdmin: "../admin/index.html",
+    navTransactions: "../transactions/index.html",
+    navOverview: "../overview/index.html"
+  };
+  for (const [id, path] of Object.entries(navTargets)) {
+    const link = $(id);
+    if (!link) continue;
+    link.href = path + window.location.search; // best-effort initial value (hover/open-in-new-tab)
+    link.addEventListener("click", (e) => {
+      e.preventDefault();
+      window.location.href = path + window.location.search;
+    });
+  }
 }
 
 function applyConfigToForm() {

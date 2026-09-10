@@ -13,17 +13,17 @@
       "type": "producer_consumer",
       "pv_peak_kwp": 8.0,
       "battery_capacity_kwh": 10.0,
-      "battery_max_rate_kwh": 3.0,
-      "base_consumption_kwh_per_hour": 0.4
+      "battery_max_rate_kwh": 5.0,
+      "base_consumption_kwh_per_hour": 0.5
     },
     {
       "id": "house_02",
       "address": "0x6AA82D8222147B1146afb4b54AA8B4bA77534C2B",
       "type": "producer_consumer",
-      "pv_peak_kwp": 5.0,
+      "pv_peak_kwp": 15.0,
       "battery_capacity_kwh": 20.0,
-      "battery_max_rate_kwh": 5.0,
-      "base_consumption_kwh_per_hour": 0.6
+      "battery_max_rate_kwh": 10.0,
+      "base_consumption_kwh_per_hour": 0.8
     },
     {
       "id": "house_03",
@@ -32,7 +32,7 @@
       "pv_peak_kwp": 0.0,
       "battery_capacity_kwh": 0,
       "battery_max_rate_kwh": 0,
-      "base_consumption_kwh_per_hour": 0.8
+      "base_consumption_kwh_per_hour": 0.5
     },
     {
       "id": "house_04",

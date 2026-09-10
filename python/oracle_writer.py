@@ -226,16 +226,6 @@ class OracleWriter:
 
     # ─────────────────────────────────────────────────────────────
 
-    def run_init(self):
-        self._send_tx(self.p2p_market.functions.setBatteryManager(self.bc["battery_manager_address"]))
-        self.register_households_if_needed()
-        self.register_p2p_if_needed()
-        self.register_gridprovider_if_needed()  # <--- NEW
-        self._send_tx(self.oracle.functions.authorizeOracle("0xd869207c0Eea60A97E1d5187adeb19433a958687"))
-        self._send_tx(self.p2p_market.functions.setProducerToHouseholdPrice(150_000))  # 0.15 token/kWh
-        self._send_tx(self.p2p_market.functions.setHouseholdToProducerPrice(40_000))   # 0.04 token/kWh
-        return 
-
     def run(self, slot_seconds: int = 60):
         """Hauptschleife: pushe einen Slot pro Minute."""
         print("\n=== Oracle Writer gestartet ===\n")

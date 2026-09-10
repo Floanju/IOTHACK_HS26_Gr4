@@ -248,23 +248,10 @@ class EnergySimulator:
         sim_hour = self.get_simulated_hour()
         weather = self._generate_weather(sim_hour)
 
-        grid_cfg = self.config["grid_provider"]
-        grid_address = grid_cfg["address"].lower()
-
-        temp_data = []
-        total_deficit = 0
-
-        for household_cfg in self.config["households"]:
-            c = self._calculate_consumption(household_cfg, sim_hour)
-            p = self._calculate_production(household_cfg, weather)
-            
-            if c > p:
-                total_deficit += (c - p)
-            
-            temp_data.append((household_cfg, c, p))
-
         readings = []
-        for household_cfg, consumption, production in temp_data:
+        for household_cfg in self.config["households"]:
+            consumption = self._calculate_consumption(household_cfg, sim_hour)
+            production = self._calculate_production(household_cfg, weather)
             surplus = production - consumption
             soc = self._update_battery_soc(household_cfg, surplus)
 
@@ -280,20 +267,6 @@ class EnergySimulator:
             )
             readings.append(reading)
             self._persist_reading(reading, sim_hour)
-
-        # Inject dynamic grid provider
-        grid_reading = HouseholdReading(
-            household_id=grid_cfg["id"],
-            address=grid_cfg["address"],
-            consumption_wh=0,
-            production_wh=total_deficit,
-            battery_soc=0,
-            battery_capacity_wh=0,
-            battery_max_rate_wh=0,
-            timestamp=int(time.time())
-        )
-        readings.append(grid_reading)
-        self._persist_reading(grid_reading, sim_hour)
 
         self._persist_weather(weather, sim_hour)
 

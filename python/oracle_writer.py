@@ -93,7 +93,6 @@ class OracleWriter:
         )
 
         self.simulator = EnergySimulator(CONFIG_PATH)
-        self.simulator.start_real_time -= 24 * 60 * 3
         print(f"DEBUG: Simulator start time: {self.simulator.start_real_time}")
         self.chain_id = bc["chain_id"]
 

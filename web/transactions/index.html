@@ -163,7 +163,7 @@
 <div class="panel">
   <h2>Energy exchanged <span class="muted" style="font-weight:400; font-size:12px;">— last 24h, producer → consumer</span></h2>
   <table id="flowTable">
-    <thead><tr><th>From (producer)</th><th>To (consumer)</th><th>Energy</th><th></th><th>Amount paid</th><th>Trades</th></tr></thead>
+    <thead><tr><th>From (producer)</th><th>To (consumer)</th><th>Energy</th><th></th><th>Amount paid</th><th>Price/Wh</th><th>Trades</th></tr></thead>
     <tbody></tbody>
   </table>
   <div id="flowStatus" class="muted" style="margin-top:8px; font-size:12px;"></div>
@@ -505,12 +505,16 @@ function renderFlowTable(trades, decimals, symbol) {
   for (const p of list) {
     const tr = document.createElement("tr");
     const pct = maxWh > 0n ? Number((p.energyWh * 1000n) / maxWh) / 10 : 0;
+    const pricePerWh = p.energyWh > 0n
+      ? Number(fmtToken(p.amountPaid, decimals)) / Number(p.energyWh)
+      : 0;
     tr.innerHTML = `
       <td>${addrCell(p.producer)}</td>
       <td>${addrCell(p.consumer)}</td>
       <td>${fmtToken(p.energyWh, 3)} kWh</td>
       <td><div class="bar-wrap"><div class="bar-track"><div class="bar-fill" style="width:${pct}%;"></div></div></div></td>
       <td>${fmtToken(p.amountPaid, decimals)} ${symbol}</td>
+      <td>${pricePerWh.toFixed(4)} ${symbol}/Wh</td>
       <td>${p.count}</td>
     `;
     tbody.appendChild(tr);

@@ -308,7 +308,22 @@
   <table id="incentiveEventsTable" style="margin-top:14px;">
     <thead>
       <tr>
-        <th>Time</th><th>Household</th><th>New score</th><th>Deviation (‰)</th>
+        <th>Time</th><th>Household</th><th>New score</th><th>Consumption dev. (‰)</th><th>Production dev. (‰)</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <h2 style="margin-top:20px">Forecast vs. Actual <span class="muted" style="font-weight:400; font-size:12px;">— last slots, per household</span></h2>
+  <button onclick="loadForecastVsActual()">Load / refresh</button>
+  <div id="forecastActualStatus" class="muted" style="margin-top:8px"></div>
+
+  <table id="forecastActualTable" style="margin-top:14px;">
+    <thead>
+      <tr>
+        <th>Slot</th><th>Household</th>
+        <th>Forecast cons. (Wh)</th><th>Actual cons. (Wh)</th>
+        <th>Forecast prod. (Wh)</th><th>Actual prod. (Wh)</th>
       </tr>
     </thead>
     <tbody></tbody>
@@ -425,10 +440,13 @@ const INCENTIVE_ABI = [
   {"inputs":[],"name":"owner","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},
   {"inputs":[{"internalType":"address","name":"household","type":"address"}],"name":"getReputationScore","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
   {"inputs":[{"internalType":"address","name":"household","type":"address"}],"name":"getPriceMultiplier","outputs":[{"internalType":"uint256","name":"multiplier","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[{"internalType":"address","name":"household","type":"address"},{"internalType":"uint256","name":"slot","type":"uint256"}],"name":"getForecast","outputs":[{"components":[{"internalType":"uint256","name":"expectedConsumptionWh","type":"uint256"},{"internalType":"uint256","name":"expectedProductionWh","type":"uint256"},{"internalType":"uint256","name":"slot","type":"uint256"},{"internalType":"uint256","name":"timestamp","type":"uint256"}],"internalType":"struct IncentiveController.Forecast","name":"","type":"tuple"}],"stateMutability":"view","type":"function"},
+  {"inputs":[{"internalType":"address","name":"household","type":"address"},{"internalType":"uint256","name":"slot","type":"uint256"}],"name":"getActual","outputs":[{"components":[{"internalType":"uint256","name":"actualConsumptionWh","type":"uint256"},{"internalType":"uint256","name":"actualProductionWh","type":"uint256"},{"internalType":"uint256","name":"slot","type":"uint256"}],"internalType":"struct IncentiveController.Actual","name":"","type":"tuple"}],"stateMutability":"view","type":"function"},
   {"anonymous":false,"inputs":[
     {"indexed":true,"internalType":"address","name":"household","type":"address"},
     {"indexed":false,"internalType":"uint256","name":"newScore","type":"uint256"},
-    {"indexed":false,"internalType":"uint256","name":"deviation","type":"uint256"}
+    {"indexed":false,"internalType":"uint256","name":"consumptionDeviation","type":"uint256"},
+    {"indexed":false,"internalType":"uint256","name":"productionDeviation","type":"uint256"}
   ],"name":"ScoreUpdated","type":"event"}
 ];
 
@@ -1602,7 +1620,8 @@ async function loadIncentiveEvents() {
       timestamp: tsByBlock.get(e.blockNumber) || 0,
       household: e.returnValues.household,
       newScore: e.returnValues.newScore,
-      deviation: e.returnValues.deviation
+      consumptionDeviation: e.returnValues.consumptionDeviation,
+      productionDeviation: e.returnValues.productionDeviation
     })).sort((a, b) => b.timestamp - a.timestamp);
 
     for (const ev of enriched) {
@@ -1612,7 +1631,8 @@ async function loadIncentiveEvents() {
         <td>${fmtTs(ev.timestamp)}</td>
         <td title="${ev.household}">${id}</td>
         <td>${ev.newScore}</td>
-        <td>${ev.deviation}</td>
+        <td>${ev.consumptionDeviation}</td>
+        <td>${ev.productionDeviation}</td>
       `;
       tbody.appendChild(tr);
     }
@@ -1623,6 +1643,72 @@ async function loadIncentiveEvents() {
   } catch (e) {
     console.error(e);
     statusEl.innerHTML = `<span class="bad">Error loading events: ${e.message}</span>`;
+  }
+}
+
+async function loadForecastVsActual() {
+  const statusEl = $("forecastActualStatus");
+  const tbody = document.querySelector("#forecastActualTable tbody");
+
+  if (!incentiveContract) {
+    statusEl.innerHTML = `<span class="muted">No IncentiveController linked — refresh above first.</span>`;
+    return;
+  }
+  if (!oracleContract) {
+    statusEl.innerHTML = `<span class="muted">Oracle not connected.</span>`;
+    return;
+  }
+
+  statusEl.textContent = "Loading forecast vs. actual…";
+  tbody.innerHTML = "";
+
+  try {
+    const currentSlot = Number(await oracleContract.methods.getCurrentSlot().call());
+    const ids = addressIdMap(currentHouseholds);
+    const MAX_SLOTS_BACK = 30;
+    const MAX_ROWS_PER_HOUSEHOLD = 6;
+
+    const rows = [];
+    for (const h of currentHouseholds) {
+      let found = 0;
+      for (let slot = currentSlot; slot >= 0 && slot > currentSlot - MAX_SLOTS_BACK && found < MAX_ROWS_PER_HOUSEHOLD; slot--) {
+        const forecast = await incentiveContract.methods.getForecast(h.address, slot).call();
+        if (Number(forecast.timestamp) === 0) continue; // keine Prognose fuer diesen Slot abgegeben
+        const actual = await incentiveContract.methods.getActual(h.address, slot).call();
+        rows.push({
+          slot,
+          household: h.address,
+          id: ids.get(h.address.toLowerCase()) || short(h.address),
+          forecastCons: forecast.expectedConsumptionWh,
+          actualCons: actual.actualConsumptionWh,
+          forecastProd: forecast.expectedProductionWh,
+          actualProd: actual.actualProductionWh
+        });
+        found++;
+      }
+    }
+
+    rows.sort((a, b) => b.slot - a.slot);
+
+    for (const r of rows) {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${r.slot}</td>
+        <td title="${r.household}">${r.id}</td>
+        <td>${r.forecastCons}</td>
+        <td>${r.actualCons}</td>
+        <td>${r.forecastProd}</td>
+        <td>${r.actualProd}</td>
+      `;
+      tbody.appendChild(tr);
+    }
+
+    statusEl.innerHTML = rows.length === 0
+      ? `<span class="muted">No forecast/actual pairs found in the last ${MAX_SLOTS_BACK} slots.</span>`
+      : `<span class="ok">${rows.length} row(s) loaded.</span>`;
+  } catch (e) {
+    console.error(e);
+    statusEl.innerHTML = `<span class="bad">Error loading forecast/actual data: ${e.message}</span>`;
   }
 }
 

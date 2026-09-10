@@ -530,12 +530,14 @@
   }
 
   .settle-bar-pos {
-      background: linear-gradient(180deg, #6ee7a0, #22a35b);
+      background-color: #1c6b41;
+      background-image: repeating-linear-gradient(45deg, transparent, transparent 4px, rgba(255, 255, 255, 0.09) 4px, rgba(255, 255, 255, 0.09) 8px);
       border-radius: 4px 4px 0 0;
   }
 
   .settle-bar-neg {
-      background: linear-gradient(0deg, #f7a1a1, #c53f3f);
+      background-color: #7a2222;
+      background-image: repeating-linear-gradient(45deg, transparent, transparent 4px, rgba(255, 255, 255, 0.09) 4px, rgba(255, 255, 255, 0.09) 8px);
       border-radius: 0 0 4px 4px;
   }
 

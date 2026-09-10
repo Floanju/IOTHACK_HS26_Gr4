@@ -17,18 +17,20 @@
   </div>
 
   <div id="missingParamsBanner" class="banner warn" style="display:none;">
-    Missing <code>oracle</code> and/or <code>market</code> URL parameter. Enter both below and
-    click "Load" — there are no built-in defaults, this page only works with an explicit deployment.
+    Missing <code>market</code> URL parameter. Enter the P2PEnergyMarket address below and click
+    "Load" — there's no built-in default, this page only works with an explicit deployment.
+    OracleStorage, the stablecoin, and any optional Battery/Incentive contracts are all derived
+    from it automatically.
   </div>
 
   <div class="panel settings-panel" id="deploymentPanel" style="display:none;">
     <h2>Deployment</h2>
     <div class="config-grid">
-      <label>OracleStorage</label>
-      <input type="text" id="cfgOracle" placeholder="0x...">
-
       <label>P2PEnergyMarket</label>
       <input type="text" id="cfgMarket" placeholder="0x...">
+
+      <label>OracleStorage</label>
+      <input type="text" id="cfgOracle" readonly placeholder="(auto, via market.oracle())">
 
       <label>Stablecoin</label>
       <input type="text" id="cfgStablecoin" readonly placeholder="(auto, via market.stablecoin())">

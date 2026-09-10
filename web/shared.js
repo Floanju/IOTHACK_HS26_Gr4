@@ -192,17 +192,13 @@ function applyConfigToForm() {
 }
 
 async function loadConfig() {
-    const oracleRaw = $("cfgOracle").value.trim();
     const marketRaw = $("cfgMarket").value.trim();
-    let oracle, market;
-    try { oracle = Web3.utils.toChecksumAddress(oracleRaw); }
-    catch (e) { if ($("cfgStatus")) $("cfgStatus").innerHTML = `<span class="bad">Invalid OracleStorage address.</span>`; return; }
+    let market;
     try { market = Web3.utils.toChecksumAddress(marketRaw); }
     catch (e) { if ($("cfgStatus")) $("cfgStatus").innerHTML = `<span class="bad">Invalid P2PEnergyMarket address.</span>`; return; }
 
-    cfg.oracle = oracle;
     cfg.market = market;
-    syncParamsToUrl({ oracle: cfg.oracle, market: cfg.market });
+    syncParamsToUrl({ market: cfg.market });
     if ($("missingParamsBanner")) $("missingParamsBanner").style.display = "none";
     if ($("cfgStatus")) $("cfgStatus").textContent = "Loading…";
 
@@ -219,6 +215,11 @@ async function loadConfig() {
 
 async function fetchDerivedAddresses() {
     const marketR = new readWeb3.eth.Contract(MARKET_ABI, cfg.market);
+    // OracleStorage is a public immutable field on the market contract, so it
+    // doesn't need to be entered separately — one address (market) is enough.
+    try { cfg.oracle = await marketR.methods.oracle().call(); }
+    catch (e) { cfg.oracle = ""; if ($("cfgStatus")) $("cfgStatus").innerHTML = `<span class="bad">Could not read oracle(): ${e.message}</span>`; return; }
+
     try { cfg.stablecoin = await marketR.methods.stablecoin().call(); }
     catch (e) { cfg.stablecoin = ""; if ($("cfgStatus")) $("cfgStatus").innerHTML = `<span class="bad">Could not read stablecoin(): ${e.message}</span>`; return; }
 
@@ -359,18 +360,16 @@ async function initGlobal() {
     setupNav();
     readWeb3 = new Web3(new Web3.providers.HttpProvider(RPC_URL));
 
-    cfg.oracle = readParamFromUrl("oracle") || "";
     cfg.market = readParamFromUrl("market") || "";
     applyConfigToForm();
 
-    if (!cfg.oracle || !cfg.market) {
+    if (!cfg.market) {
         if ($("missingParamsBanner")) $("missingParamsBanner").style.display = "block";
         toggleSettings(true);
         return;
     }
 
     try {
-        cfg.oracle = Web3.utils.toChecksumAddress(cfg.oracle);
         cfg.market = Web3.utils.toChecksumAddress(cfg.market);
     } catch (e) {
         if ($("cfgStatus")) $("cfgStatus").innerHTML = `<span class="bad">Invalid address in URL params.</span>`;

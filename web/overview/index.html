@@ -68,9 +68,9 @@
 <div class="panel">
   <h2>Consumption vs. production <span class="muted" style="font-weight:400; font-size:12px;">— per account</span></h2>
   <div class="chart-legend">
-    <span><span class="swatch" style="background:#fbbf24;"></span>Consumption (covered by own production)</span>
-    <span><span class="swatch" style="background:#4ade80;"></span>Surplus produced</span>
-    <span><span class="swatch" style="background:#f87171;"></span>Consumption exceeding production</span>
+    <span><span class="swatch" style="background:#8a5a12;"></span>Consumption (covered by own production)</span>
+    <span><span class="swatch" style="background:#1c6b41;"></span>Surplus produced</span>
+    <span><span class="swatch" style="background:#7a2222;"></span>Consumption exceeding production</span>
   </div>
   <div class="acct-charts" id="cpCharts"></div>
   <div id="cpStatus" class="muted" style="margin-top:8px; font-size:12px;"></div>
@@ -79,9 +79,9 @@
 <div class="panel">
   <h2>Battery history <span class="muted" style="font-weight:400; font-size:12px;">— per account, SoC over time</span></h2>
   <div class="chart-legend">
-    <span><span class="swatch" style="background:#4ade80;"></span>Charging</span>
-    <span><span class="swatch" style="background:#6b7280;"></span>Idle</span>
-    <span><span class="swatch" style="background:#f87171;"></span>Discharging</span>
+    <span><span class="swatch" style="background:#1c6b41;"></span>Charging</span>
+    <span><span class="swatch" style="background:#3a3f4a;"></span>Idle</span>
+    <span><span class="swatch" style="background:#7a2222;"></span>Discharging</span>
   </div>
   <div class="acct-charts" id="battCharts"></div>
   <div id="battStatus" class="muted" style="margin-top:8px; font-size:12px;"></div>
@@ -99,6 +99,7 @@ const CP_BAR_WIDTH = 16;
 const BATT_CHART_HEIGHT = 110;
 const BATT_POINT_SLOT = 26;
 let battChartUid = 0;
+let cpChartUid = 0;
 
 function fmtToken(raw, decimals) {
   const sign = raw < 0n ? "-" : "";
@@ -391,6 +392,7 @@ function buildConsumptionSvg(points) {
   const width = Math.max(points.length * CP_BAR_SLOT, 200);
   const height = CP_CHART_HEIGHT;
   const baseline = height - 4;
+  const uid = cpChartUid++;
 
   let maxWh = 0n;
   for (const p of points) {
@@ -403,11 +405,23 @@ function buildConsumptionSvg(points) {
 
   const svg = svgEl("svg", { viewBox: `0 0 ${width} ${height}`, width, height, style: "display:block;" });
 
+  // Same flat-color + diagonal-stripe texture treatment used on the battery
+  // chart, instead of a plain flat fill.
+  const defs = svgEl("defs", {});
+  const stripes = svgEl("pattern", {
+    id: `cpStripes-${uid}`, width: "6", height: "6",
+    patternUnits: "userSpaceOnUse", patternTransform: "rotate(45)"
+  });
+  stripes.appendChild(svgEl("rect", { width: "6", height: "6", fill: "transparent" }));
+  stripes.appendChild(svgEl("line", { x1: "0", y1: "0", x2: "0", y2: "6", stroke: "rgba(255,255,255,0.09)", "stroke-width": "3" }));
+  defs.appendChild(stripes);
+  svg.appendChild(defs);
+
   points.forEach((p, i) => {
     const x = i * CP_BAR_SLOT + (CP_BAR_SLOT - CP_BAR_WIDTH) / 2;
     const consumptionPx = scale(p.consumption);
     const isDeficit = p.consumption > p.production;
-    const consumptionColor = isDeficit ? "#f87171" : "#fbbf24";
+    const consumptionColor = isDeficit ? "#7a2222" : "#8a5a12";
 
     const rectCons = svgEl("rect", {
       x, y: baseline - consumptionPx, width: CP_BAR_WIDTH, height: consumptionPx, fill: consumptionColor, rx: 2
@@ -416,16 +430,22 @@ function buildConsumptionSvg(points) {
     titleCons.textContent = `Slot ${p.slot} — consumption ${fmtToken(p.consumption, 3)} kWh, production ${fmtToken(p.production, 3)} kWh`;
     rectCons.appendChild(titleCons);
     svg.appendChild(rectCons);
+    svg.appendChild(svgEl("rect", {
+      x, y: baseline - consumptionPx, width: CP_BAR_WIDTH, height: consumptionPx, fill: `url(#cpStripes-${uid})`, rx: 2
+    }));
 
     if (p.production > p.consumption) {
       const surplusPx = scale(p.production - p.consumption);
       const rectSurplus = svgEl("rect", {
-        x, y: baseline - consumptionPx - surplusPx, width: CP_BAR_WIDTH, height: surplusPx, fill: "#4ade80", rx: 2
+        x, y: baseline - consumptionPx - surplusPx, width: CP_BAR_WIDTH, height: surplusPx, fill: "#1c6b41", rx: 2
       });
       const titleSurplus = svgEl("title", {});
       titleSurplus.textContent = `Slot ${p.slot} — surplus ${fmtToken(p.production - p.consumption, 3)} kWh`;
       rectSurplus.appendChild(titleSurplus);
       svg.appendChild(rectSurplus);
+      svg.appendChild(svgEl("rect", {
+        x, y: baseline - consumptionPx - surplusPx, width: CP_BAR_WIDTH, height: surplusPx, fill: `url(#cpStripes-${uid})`, rx: 2
+      }));
     }
   });
 

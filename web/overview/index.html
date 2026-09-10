@@ -496,22 +496,10 @@ function buildBatterySvg(points) {
 
   const svg = svgEl("svg", { viewBox: `0 0 ${width} ${height}`, width, height, style: "display:block;" });
 
-  // Dark, slightly saturated gradients per state (lighter near the SoC line,
-  // fading to near-black toward the baseline) plus a subtle diagonal-stripe
-  // overlay — the same two-layer "gradient + repeating diagonal texture"
-  // treatment used for selected rows elsewhere in the app.
+  // Flat solid color per state plus a subtle diagonal-stripe texture overlay
+  // — the same two-layer "solid + repeating diagonal texture" treatment used
+  // for selected rows elsewhere in the app (no glossy gradient).
   const defs = svgEl("defs", {});
-  const gradients = [
-    ["charge", "#5fe3a0", "#0d2815"],
-    ["discharge", "#f38b8b", "#3a0d0d"],
-    ["idle", "#9aa0ab", "#20242c"]
-  ];
-  for (const [key, top_, bottom] of gradients) {
-    const grad = svgEl("linearGradient", { id: `battGrad-${key}-${uid}`, x1: "0", y1: "0", x2: "0", y2: "1" });
-    grad.appendChild(svgEl("stop", { offset: "0%", "stop-color": top_ }));
-    grad.appendChild(svgEl("stop", { offset: "100%", "stop-color": bottom }));
-    defs.appendChild(grad);
-  }
   const stripes = svgEl("pattern", {
     id: `battStripes-${uid}`, width: "6", height: "6",
     patternUnits: "userSpaceOnUse", patternTransform: "rotate(45)"
@@ -521,10 +509,22 @@ function buildBatterySvg(points) {
   defs.appendChild(stripes);
   svg.appendChild(defs);
 
+  const solidFills = {
+    charge: "#1c6b41",
+    discharge: "#7a2222",
+    idle: "#3a3f4a"
+  };
+
   [0, 25, 50, 75, 100].forEach(pct => {
     const gy = y(pct);
     svg.appendChild(svgEl("line", { x1: 0, y1: gy, x2: width, y2: gy, stroke: "#22262f", "stroke-width": 1 }));
   });
+
+  const lightFills = {
+    charge: "rgba(94, 227, 160, 0.16)",
+    discharge: "rgba(248, 129, 129, 0.16)",
+    idle: "rgba(154, 160, 171, 0.14)"
+  };
 
   for (let i = 0; i < points.length - 1; i++) {
     const p0 = points[i], p1 = points[i + 1];
@@ -533,7 +533,12 @@ function buildBatterySvg(points) {
     const key = p1.soc > p0.soc ? "charge" : (p1.soc < p0.soc ? "discharge" : "idle");
     const shape = `${x0},${baseline} ${x0},${y0} ${x1},${y1} ${x1},${baseline}`;
 
-    const poly = svgEl("polygon", { points: shape, fill: `url(#battGrad-${key}-${uid})` });
+    // Lighter tint of the same color, filling the air above the SoC line up
+    // to the top of the chart (the highlighted-column look from the reference).
+    const airShape = `${x0},${top} ${x0},${y0} ${x1},${y1} ${x1},${top}`;
+    svg.appendChild(svgEl("polygon", { points: airShape, fill: lightFills[key] }));
+
+    const poly = svgEl("polygon", { points: shape, fill: solidFills[key] });
     const title = svgEl("title", {});
     title.textContent = `Slot ${p0.slot} → ${p1.slot}: ${p0.soc}% → ${p1.soc}%`;
     poly.appendChild(title);
@@ -542,8 +547,6 @@ function buildBatterySvg(points) {
     svg.appendChild(svgEl("polygon", { points: shape, fill: `url(#battStripes-${uid})` }));
   }
 
-  const linePoints = points.map((p, i) => `${x(i)},${y(p.soc)}`).join(" ");
-  svg.appendChild(svgEl("polyline", { points: linePoints, fill: "none", stroke: "#e6e6e6", "stroke-width": 1.5, "stroke-linejoin": "round" }));
   svg.appendChild(svgEl("line", { x1: 0, y1: baseline, x2: width, y2: baseline, stroke: "#333944", "stroke-width": 1 }));
 
   return svg;

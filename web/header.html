@@ -46,6 +46,23 @@
     <div id="cfgStatus" class="muted" style="margin-top:6px; font-size:12px;"></div>
   </div>
 
+  <div class="panel settings-panel" id="householdLabelsPanel" style="display:none;">
+    <h2>Household labels</h2>
+    <div class="hint">
+      Optional: paste a household config JSON (either a bare array, or an object with a
+      "households" array) with an <code>address</code> and <code>id</code> per entry. Any address
+      that matches is shown as its id everywhere in this app instead of the raw wallet address —
+      the copy button next to an address always copies the real address regardless. Saved in this
+      browser only.
+    </div>
+    <textarea id="householdLabelsInput" rows="8" placeholder='{"households": [{"id": "house_01", "address": "0x...", ...}]}'></textarea>
+    <div>
+      <button onclick="saveHouseholdLabels()">Save</button>
+      <button class="secondary" onclick="clearHouseholdLabels()">Clear</button>
+    </div>
+    <div id="householdLabelsStatus" class="muted" style="margin-top:6px; font-size:12px;"></div>
+  </div>
+
   <div class="panel" id="walletPanel">
     <h2>Wallet</h2>
     <div class="hint">

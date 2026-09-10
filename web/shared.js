@@ -119,7 +119,20 @@ const INCENTIVE_ABI = [
 ];
 
 const $ = id => document.getElementById(id);
-const short = a => a ? a.slice(0, 6) + "…" + a.slice(-4) : "-";
+
+// Optional address -> friendly id map, loaded from the "Household labels"
+// panel in the header. short() is used everywhere addresses are displayed
+// (tables, chart titles, etc.), so overriding it here is enough to relabel
+// the whole app in one place. copyAddress() always receives the real address
+// directly (never the label), so copying is unaffected either way.
+let householdLabels = {};
+const short = a => {
+    if (!a) return "-";
+    const label = householdLabels[a.toLowerCase()];
+    return label || (a.slice(0, 6) + "…" + a.slice(-4));
+};
+
+const HOUSEHOLD_LABELS_STORAGE_KEY = "energyTradingHouseholdLabels";
 
 // Added incentive to global config
 let cfg = { oracle: "", market: "", stablecoin: "", battery: "", incentive: "" };
@@ -181,6 +194,83 @@ function toggleSettings(forceOpen) {
         btn.classList.toggle("active", shouldOpen);
         btn.setAttribute("aria-expanded", String(shouldOpen));
     }
+}
+
+// ─────────────────────────────────────────────────────────────
+//  Household labels (optional address -> friendly id map)
+// ─────────────────────────────────────────────────────────────
+
+/// Accepts either a bare `[{ id, address, ... }, ...]` array or an object
+/// with a "households" array (i.e. the config JSON as-is). `persist` writes
+/// the raw text to localStorage so it survives navigation/reloads; pass
+/// false when just re-applying already-persisted text on page load.
+function applyHouseholdLabelsJson(jsonText, persist) {
+    const statusEl = $("householdLabelsStatus");
+    const text = (jsonText || "").trim();
+
+    if (!text) {
+        householdLabels = {};
+        if (persist) { try { localStorage.removeItem(HOUSEHOLD_LABELS_STORAGE_KEY); } catch (e) {} }
+        if (statusEl) statusEl.innerHTML = `<span class="muted">No labels set — showing raw addresses.</span>`;
+        return true;
+    }
+
+    let parsed;
+    try { parsed = JSON.parse(text); }
+    catch (e) { if (statusEl) statusEl.innerHTML = `<span class="bad">Invalid JSON: ${e.message}</span>`; return false; }
+
+    const list = Array.isArray(parsed) ? parsed : parsed.households;
+    if (!Array.isArray(list)) {
+        if (statusEl) statusEl.innerHTML = `<span class="bad">Expected an array, or an object with a "households" array.</span>`;
+        return false;
+    }
+
+    const map = {};
+    let count = 0, skipped = 0;
+    for (const h of list) {
+        if (!h || !h.address || !h.id) { skipped++; continue; }
+        try {
+            map[Web3.utils.toChecksumAddress(String(h.address).trim()).toLowerCase()] = String(h.id);
+            count++;
+        } catch (e) { skipped++; }
+    }
+
+    householdLabels = map;
+    if (persist) { try { localStorage.setItem(HOUSEHOLD_LABELS_STORAGE_KEY, text); } catch (e) {} }
+    if (statusEl) {
+        statusEl.innerHTML = skipped > 0
+            ? `<span class="ok">Loaded ${count} label(s).</span> <span class="muted">(${skipped} entr${skipped === 1 ? "y" : "ies"} skipped — missing/invalid address or id.)</span>`
+            : `<span class="ok">Loaded ${count} label(s).</span>`;
+    }
+    return true;
+}
+
+/// Called by the Save button. Applying labels changes what short() returns,
+/// but every page already has its data loaded and rendered with the old
+/// labels baked into the DOM text — reloading is the simplest way to
+/// guarantee every table/chart on the current page picks up the new labels
+/// consistently, without each page needing its own re-render hook.
+function saveHouseholdLabels() {
+    const input = $("householdLabelsInput");
+    if (applyHouseholdLabelsJson(input ? input.value : "", true)) {
+        setTimeout(() => location.reload(), 400);
+    }
+}
+
+function clearHouseholdLabels() {
+    const input = $("householdLabelsInput");
+    if (input) input.value = "";
+    applyHouseholdLabelsJson("", true);
+    setTimeout(() => location.reload(), 400);
+}
+
+/// Loads any previously-saved labels before the page's own data fetch/render
+/// runs, so the very first paint already shows ids instead of raw addresses.
+function loadHouseholdLabelsFromStorage() {
+    let saved = "";
+    try { saved = localStorage.getItem(HOUSEHOLD_LABELS_STORAGE_KEY) || ""; } catch (e) {}
+    if ($("householdLabelsInput")) $("householdLabelsInput").value = saved;
+    if (saved) applyHouseholdLabelsJson(saved, false);
 }
 
 function applyConfigToForm() {
@@ -358,6 +448,7 @@ function copyAddress(addr, btn) {
 // Global initialization function - safe to call from all scripts
 async function initGlobal() {
     setupNav();
+    loadHouseholdLabelsFromStorage();
     readWeb3 = new Web3(new Web3.providers.HttpProvider(RPC_URL));
 
     cfg.market = readParamFromUrl("market") || "";

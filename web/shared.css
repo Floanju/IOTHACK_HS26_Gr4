@@ -118,7 +118,8 @@
 
   input[type=text],
   input[type=number],
-  select {
+  select,
+  textarea {
       width: 100%;
       background: #0f1115;
       border: 1px solid #333944;
@@ -127,6 +128,12 @@
       padding: 6px 8px;
       font-family: ui-monospace, Consolas, monospace;
       font-size: 12px;
+  }
+
+  textarea {
+      resize: vertical;
+      margin-bottom: 8px;
+      line-height: 1.5;
   }
 
   input[readonly] {

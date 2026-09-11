@@ -367,35 +367,29 @@ contract P2PEnergyMarket {
         ).getMeterAtSlot(household, slot);
         netto = int256(reading.productionWh) - int256(reading.consumptionWh);
 
-        if (applyBattery && address(batteryManager) != address(0)) {
-            bool managed;
-            try batteryManager.isManaged(household) returns (bool m) {
-                managed = m;
-            } catch {
-                emit BatteryActionFailed(household, slot);
-                managed = false;
-            }
-
-            if (managed) {
-                try batteryManager.decideAction(household) returns (
-                    IBatteryManager.Action action,
-                    uint256 amountWh
-                ) {
-                    if (action == IBatteryManager.Action.CHARGE) {
-                        netto -= int256(amountWh);
-                        emit BatteryActionApplied(household, slot, action, amountWh);
-                    } else if (action == IBatteryManager.Action.DISCHARGE) {
-                        netto += int256(amountWh);
-                        emit BatteryActionApplied(household, slot, action, amountWh);
-                    }
-                    // IDLE: no netto change, nothing to log.
-                } catch {
-                    // Batterie-Call fehlgeschlagen -> netto bleibt unverändert,
-                    // aber JETZT SICHTBAR statt still verschluckt, damit ein
-                    // fehlgeschlagener Call nicht wie "Batterie hat nichts
-                    // beigetragen" aussieht.
-                    emit BatteryActionFailed(household, slot);
+        if (
+            applyBattery &&
+            address(batteryManager) != address(0) &&
+            batteryManager.isManaged(household)
+        ) {
+            try batteryManager.decideAction(household) returns (
+                IBatteryManager.Action action,
+                uint256 amountWh
+            ) {
+                if (action == IBatteryManager.Action.CHARGE) {
+                    netto -= int256(amountWh);
+                    emit BatteryActionApplied(household, slot, action, amountWh);
+                } else if (action == IBatteryManager.Action.DISCHARGE) {
+                    netto += int256(amountWh);
+                    emit BatteryActionApplied(household, slot, action, amountWh);
                 }
+                // IDLE: no netto change, nothing to log.
+            } catch {
+                // Batterie-Call fehlgeschlagen -> netto bleibt unverändert,
+                // aber JETZT SICHTBAR statt still verschluckt, damit ein
+                // fehlgeschlagener Call nicht wie "Batterie hat nichts
+                // beigetragen" aussieht.
+                emit BatteryActionFailed(household, slot);
             }
         }
     }

@@ -158,20 +158,25 @@ class OracleWriter:
     # ─────────────────────────────────────────────────────────────
 
     def run(self, slot_seconds: int = 60):
-        print(self.p2p_market.functions.settleSlot()._encode_transaction_data())
-        self._send_tx(self.p2p_market.functions.settleSlot())
-        return
+        while True:
+            print(self.p2p_market.functions.settleSlot()._encode_transaction_data())
+            self._send_tx(self.p2p_market.functions.settleSlot())
+            time.sleep(1)
         """Hauptschleife: pushe einen Slot pro Minute."""
         self.register_households_if_needed()
         self.register_gridprovider_if_needed()
         self.register_p2p_if_needed()
         self._send_tx(self.oracle.functions.authorizeOracle("0xd869207c0Eea60A97E1d5187adeb19433a958687"))
+        print("ptpmarket stuff")
         self._send_tx(self.p2p_market.functions.setBatteryManager(self.bc["battery_manager_address"]))
         self._send_tx(self.p2p_market.functions.setIncentiveController(self.bc["incentive_controller_address"]))
         self._send_tx(self.p2p_market.functions.setProducerToHouseholdPrice(150_000))  # 0.15 token/kWh
         self._send_tx(self.p2p_market.functions.setHouseholdToProducerPrice(40_000))   # 0.04 token/kWh
+        print("battery stuff")
         self._send_tx(self.battery_manager.functions.addHousehold(self.config["households"][0]["address"]))  
         self._send_tx(self.battery_manager.functions.addHousehold(self.config["households"][1]["address"]))
+        print("settlement stuff")
+
         return 
 
 # ─────────────────────────────────────────────────────────────────────

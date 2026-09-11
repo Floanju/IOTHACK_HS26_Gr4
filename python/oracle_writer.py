@@ -220,7 +220,7 @@ class OracleWriter:
                   f"V={h['consumption_wh']}Wh, P={h['production_wh']}Wh, "
                   f"SoC={h['battery_soc']}%")
         print("settleSlot() wird im P2P-Market aufgerufen, um den Slot abzuschliessen.")
-        self._send_tx(self.p2p_market.functions.settleSlot())
+        #self._send_tx(self.p2p_market.functions.settleSlot())
         time.sleep(1)  # Kurze Pause, damit die nächste Runde nicht sofort startet
 
     # ─────────────────────────────────────────────────────────────

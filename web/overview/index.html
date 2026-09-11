@@ -605,9 +605,6 @@ function buildConsumptionSvg(points) {
     const rectCons = svgEl("rect", {
       x, y: baseline - consumptionPx, width: CP_BAR_WIDTH, height: consumptionPx, fill: consumptionColor, rx: 2
     });
-    const titleCons = svgEl("title", {});
-    titleCons.textContent = `Slot ${p.slot} — consumption ${fmtToken(p.consumption, 3)} kWh, production ${fmtToken(p.production, 3)} kWh`;
-    rectCons.appendChild(titleCons);
     svg.appendChild(rectCons);
     svg.appendChild(svgEl("rect", {
       x, y: baseline - consumptionPx, width: CP_BAR_WIDTH, height: consumptionPx, fill: `url(#cpStripes-${uid})`, rx: 2
@@ -618,14 +615,22 @@ function buildConsumptionSvg(points) {
       const rectSurplus = svgEl("rect", {
         x, y: baseline - consumptionPx - surplusPx, width: CP_BAR_WIDTH, height: surplusPx, fill: "#1c6b41", rx: 2
       });
-      const titleSurplus = svgEl("title", {});
-      titleSurplus.textContent = `Slot ${p.slot} — surplus ${fmtToken(p.production - p.consumption, 3)} kWh`;
-      rectSurplus.appendChild(titleSurplus);
       svg.appendChild(rectSurplus);
       svg.appendChild(svgEl("rect", {
         x, y: baseline - consumptionPx - surplusPx, width: CP_BAR_WIDTH, height: surplusPx, fill: `url(#cpStripes-${uid})`, rx: 2
       }));
     }
+
+    // Full-height, on-top, transparent hover strip over this slot's column —
+    // hovering anywhere in the column (bar or empty space) shows the same
+    // tooltip, instead of only the visible fill area.
+    const hoverStrip = svgEl("rect", { x, y: 0, width: CP_BAR_WIDTH, height: baseline, fill: "transparent" });
+    attachChartTooltip(hoverStrip, () => {
+      let html = `Slot ${p.slot}<br>Consumption: ${fmtToken(p.consumption, 3)} kWh<br>Production: ${fmtToken(p.production, 3)} kWh`;
+      if (p.production > p.consumption) html += `<br>Surplus: ${fmtToken(p.production - p.consumption, 3)} kWh`;
+      return html;
+    });
+    svg.appendChild(hoverStrip);
   });
 
   svg.appendChild(svgEl("line", { x1: 0, y1: baseline, x2: width, y2: baseline, stroke: "#333944", "stroke-width": 1 }));
@@ -691,13 +696,24 @@ function buildBatterySvg(points) {
     svg.appendChild(svgEl("polygon", { points: airShape, fill: lightFills[key] }));
 
     const poly = svgEl("polygon", { points: shape, fill: solidFills[key] });
-    const title = svgEl("title", {});
-    title.textContent = `Slot ${p0.slot} → ${p1.slot}: ${p0.soc}% → ${p1.soc}%`;
-    poly.appendChild(title);
     svg.appendChild(poly);
 
     svg.appendChild(svgEl("polygon", { points: shape, fill: `url(#battStripes-${uid})` }));
+
+    // Full-height, transparent hover strip spanning this segment — shows the
+    // exact reading at each end plus the direction of change between them.
+    const hoverStrip = svgEl("rect", { x: Math.min(x0, x1), y: top, width: Math.abs(x1 - x0), height: baseline - top, fill: "transparent" });
+    attachChartTooltip(hoverStrip, () => `Slot ${p0.slot} → ${p1.slot}<br>${p0.soc}% → ${p1.soc}%`);
+    svg.appendChild(hoverStrip);
   }
+
+  points.forEach((p, i) => {
+    const dot = svgEl("circle", { cx: x(i), cy: y(p.soc), r: 3, fill: "#e6e6e6", opacity: 0 });
+    attachChartTooltip(dot, () => `Slot ${p.slot}<br>${p.soc}%`);
+    dot.addEventListener("mouseenter", () => { dot.setAttribute("opacity", "1"); });
+    dot.addEventListener("mouseleave", () => { dot.setAttribute("opacity", "0"); });
+    svg.appendChild(dot);
+  });
 
   svg.appendChild(svgEl("line", { x1: 0, y1: baseline, x2: width, y2: baseline, stroke: "#333944", "stroke-width": 1 }));
 

@@ -683,3 +683,20 @@
       margin-right: 5px;
       vertical-align: middle;
   }
+
+  /* Floating tooltip shown on hover over chart bars/points (see attachChartTooltip in shared.js) */
+  .chart-tooltip {
+      position: fixed;
+      z-index: 1000;
+      pointer-events: none;
+      background: #1c2028;
+      border: 1px solid #3a4150;
+      color: #e6e6e6;
+      border-radius: 6px;
+      padding: 6px 10px;
+      font-size: 12px;
+      font-family: ui-monospace, Consolas, monospace;
+      white-space: nowrap;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+      display: none;
+  }

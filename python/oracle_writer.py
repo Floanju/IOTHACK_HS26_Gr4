@@ -78,6 +78,12 @@ class OracleWriter:
         balance_eth = self.w3.from_wei(self.w3.eth.get_balance(self.account.address), "ether")
         print(f"Sepolia ETH Balance: {balance_eth}")
 
+        # Lokal verfolgte Nonce statt vor jeder TX neu abzufragen - der oeffentliche
+        # RPC ist lastverteilt ueber mehrere Nodes, die den Mempool nicht synchron
+        # sehen ("replacement transaction underpriced" / "nonce too low" bei den
+        # vielen sequenziellen TXs pro Slot).
+        self._nonce = None
+
         # Contract laden
         with open(ABI_DIR / "OracleStorage.json") as f:
             oracle_abi = json.load(f)["abi"]
@@ -181,6 +187,42 @@ class OracleWriter:
                 print(f"Registriere Haushalt {h['id']} ({addr}) im P2P-Market...")
                 # Call registerHousehold instead of registerProducer
                 self._send_tx(self.p2p_market.functions.registerHousehold(addr))
+
+    def register_grid_operator_if_needed(self):
+        """Registriert EKR (Netzbetreiber) als Producer im P2P Market - EKR ist kein
+        Haushalt und wird daher separat von register_households_if_needed() behandelt."""
+        ekr = self.config.get("grid_operator")
+        if not ekr:
+            return
+        addr = Web3.to_checksum_address(ekr["address"])
+        registered = self.p2p_market.functions.isRegisteredProducer(addr).call()
+        if registered:
+            print(f"Netzbetreiber {ekr['id']} ({addr}) bereits als Producer registriert.")
+            return
+        print(f"Registriere Netzbetreiber {ekr['id']} ({addr}) als Producer ...")
+        self._send_tx(self.p2p_market.functions.registerProducer(addr))
+
+    def sync_grid_operator_prices(self):
+        """Schreibt EKRs Ankaufs-/Verkaufspreis in den P2P Market, falls abweichend.
+
+        buy_price_per_kwh:  Preis, den EKR fuer von Haushalten gekaufte
+                             Ueberschuss-Energie zahlt (householdToProducerPrice).
+        sell_price_per_kwh: Preis, den EKR fuer an Haushalte verkaufte Energie
+                             verlangt (producerToHouseholdPrice).
+        """
+        ekr = self.config.get("grid_operator")
+        if not ekr:
+            return
+        buy_price = ekr["buy_price_per_kwh"]
+        sell_price = ekr["sell_price_per_kwh"]
+
+        if self.p2p_market.functions.householdToProducerPrice().call() != buy_price:
+            print(f"Setze EKR-Ankaufspreis (Haushalt -> EKR) auf {buy_price} ...")
+            self._send_tx(self.p2p_market.functions.setHouseholdToProducerPrice(buy_price))
+
+        if self.p2p_market.functions.producerToHouseholdPrice().call() != sell_price:
+            print(f"Setze EKR-Verkaufspreis (EKR -> Haushalt) auf {sell_price} ...")
+            self._send_tx(self.p2p_market.functions.setProducerToHouseholdPrice(sell_price))
 
     # ─────────────────────────────────────────────────────────────
 

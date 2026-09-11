@@ -199,6 +199,40 @@ function fmtSlotTime(slot) {
   return d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
 }
 
+// Fills gaps (null values) in a slot-indexed points array with a straight
+// line from the last known value before the gap to the next known value
+// after it — a purely visual stand-in for a sensor outage, never real data.
+// Points get `interpolated: true` so the chart can render them distinctly
+// (lighter/dashed) instead of as normal readings. A gap touching either edge
+// of the window (no known value on one side) is left null — there's nothing
+// to draw a line to.
+function interpolateGaps(points, keys, isBigInt) {
+  const result = points.map(p => ({ ...p }));
+  let i = 0;
+  while (i < result.length) {
+    if (result[i][keys[0]] !== null) { i++; continue; }
+    const prevIdx = i - 1;
+    let j = i;
+    while (j < result.length && result[j][keys[0]] === null) j++;
+    const nextIdx = j;
+    if (prevIdx >= 0 && nextIdx < result.length) {
+      const span = nextIdx - prevIdx;
+      for (let k = i; k < nextIdx; k++) {
+        const t = (k - prevIdx) / span;
+        for (const key of keys) {
+          const a = Number(result[prevIdx][key]);
+          const b = Number(result[nextIdx][key]);
+          const val = Math.round(a + (b - a) * t);
+          result[k][key] = isBigInt ? BigInt(val) : val;
+        }
+        result[k].interpolated = true;
+      }
+    }
+    i = nextIdx;
+  }
+  return result;
+}
+
 function fmtToken(raw, decimals) {
   const sign = raw < 0n ? "-" : "";
   const abs = raw < 0n ? -raw : raw;
@@ -563,8 +597,9 @@ async function renderTimeWindow() {
         : { slot, consumption: null, production: null };
     });
     const readingCount = visible.filter(p => p.consumption !== null).length;
+    const filled = interpolateGaps(visible, ["consumption", "production"], true);
     wrap.innerHTML = "";
-    wrap.appendChild(buildConsumptionSvg(visible));
+    wrap.appendChild(buildConsumptionSvg(filled));
     const meta = document.querySelector(`[data-cp-meta="${key}"]`);
     if (meta) meta.textContent = readingCount > 0 ? `${readingCount} reading(s) in this window` : `No readings in this window`;
   }
@@ -586,8 +621,9 @@ async function renderTimeWindow() {
       if (meta) meta.textContent = readings.length === 1 ? `${readings[0].soc}% at slot ${readings[0].slot}` : "";
       continue;
     }
+    const filled = interpolateGaps(visible, ["soc"], false);
     wrap.innerHTML = "";
-    wrap.appendChild(buildBatterySvg(visible));
+    wrap.appendChild(buildBatterySvg(filled));
     const last = readings[readings.length - 1], prev = readings[readings.length - 2];
     const state = last.soc > prev.soc ? { cls: "charging", label: "Charging" }
       : last.soc < prev.soc ? { cls: "discharging", label: "Discharging" }

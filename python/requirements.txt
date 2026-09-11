@@ -5,6 +5,9 @@ web3>=7.0,<8.0
 python-dotenv>=1.0
 numpy>=1.26
 scikit-learn>=1.4
+# Physikalisches PV-Produktionsmodell (ai_forecast.py, PVPhysicalModel) -
+# braucht keine Trainingsdaten, nur pv_peak_kwp + aktuelles Wetter.
+pvlib>=0.11
 # Optional für Phase 3 (Teams können erweitern):
 # xgboost>=2.0
 # prophet>=1.1

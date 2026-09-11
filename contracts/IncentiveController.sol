@@ -68,7 +68,14 @@ contract IncentiveController is IIncentiveController {
 
     event ForecastSubmitted(address indexed household, uint256 slot, uint256 expectedConsumption);
     event ActualSubmitted(address indexed household, uint256 slot, uint256 actualConsumption);
-    event ScoreUpdated(address indexed household, uint256 newScore, uint256 deviation);
+    /// @notice consumptionDeviation/productionDeviation je in Promille (1000 = 100% Abweichung).
+    ///         productionDeviation ist 0, falls der Haushalt keine PV-Prognose abgegeben hat.
+    event ScoreUpdated(
+        address indexed household,
+        uint256 newScore,
+        uint256 consumptionDeviation,
+        uint256 productionDeviation
+    );
     event AIAuthorized(address indexed ai);
 
     // ─────────────────────────────────────────────────────────────
@@ -170,18 +177,28 @@ contract IncentiveController is IIncentiveController {
         if (f.timestamp == 0 || f.expectedConsumptionWh == 0) return;
         if (a.actualConsumptionWh == 0 && a.actualProductionWh == 0) return;
 
-        // TODO: Implementierung durch Team
-        //
-        // uint256 deviation = _calculateDeviation(f.expectedConsumptionWh, a.actualConsumptionWh);
-        // uint256 currentScore = reputationScore[household];
-        //
-        // if (deviation < 100) {
-        //     reputationScore[household] = _min(currentScore + 20, 1000);
-        // } else if (deviation > 250) {
-        //     reputationScore[household] = currentScore > 30 ? currentScore - 30 : 0;
-        // }
-        //
-        // emit ScoreUpdated(household, reputationScore[household], deviation);
+        uint256 consumptionDeviation = _calculateDeviation(f.expectedConsumptionWh, a.actualConsumptionWh);
+        uint256 deviation = consumptionDeviation;
+
+        // PV-Abweichung nur einbeziehen, wenn der Haushalt ueberhaupt Produktion
+        // vorhergesagt hat (reine Konsumenten haben expectedProductionWh == 0) -
+        // sonst wuerde _calculateDeviation() faelschlich 0 (perfekte Abweichung) liefern
+        // und die Score-Berechnung fuer Konsumenten unbeabsichtigt verzerren.
+        uint256 productionDeviation = 0;
+        if (f.expectedProductionWh > 0) {
+            productionDeviation = _calculateDeviation(f.expectedProductionWh, a.actualProductionWh);
+            deviation = (consumptionDeviation + productionDeviation) / 2;
+        }
+
+        uint256 currentScore = reputationScore[household];
+
+        if (deviation < 100) {
+            reputationScore[household] = _min(currentScore + 20, 1000);
+        } else if (deviation > 250) {
+            reputationScore[household] = currentScore > 30 ? currentScore - 30 : 0;
+        }
+
+        emit ScoreUpdated(household, reputationScore[household], consumptionDeviation, productionDeviation);
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -199,22 +216,18 @@ contract IncentiveController is IIncentiveController {
      *                score 0    → multiplier 1200 (20% Aufschlag)
      */
     function getPriceMultiplier(address household) external view returns (uint256 multiplier) {
-        // TODO: Implementierung durch Team
-        //
-        // uint256 score = reputationScore[household];
-        // if (score == 0) return BASE_MULTIPLIER; // Neuer Haushalt: neutral
-        //
-        // // Lineare Interpolation zwischen 800 und 1200
-        // // score=1000 -> 800, score=500 -> 1000, score=0 -> 1200
-        // if (score >= 500) {
-        //     uint256 discount = ((score - 500) * MAX_DISCOUNT) / 500;
-        //     return BASE_MULTIPLIER - discount;
-        // } else {
-        //     uint256 penalty = ((500 - score) * MAX_PENALTY) / 500;
-        //     return BASE_MULTIPLIER + penalty;
-        // }
+        uint256 score = reputationScore[household];
+        if (score == 0) return BASE_MULTIPLIER; // Neuer Haushalt: neutral
 
-        return BASE_MULTIPLIER; // Default: kein Incentive aktiv
+        // Lineare Interpolation zwischen 800 und 1200
+        // score=1000 -> 800, score=500 -> 1000, score=0 -> 1200
+        if (score >= 500) {
+            uint256 discount = ((score - 500) * MAX_DISCOUNT) / 500;
+            return BASE_MULTIPLIER - discount;
+        } else {
+            uint256 penalty = ((500 - score) * MAX_PENALTY) / 500;
+            return BASE_MULTIPLIER + penalty;
+        }
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -242,6 +255,24 @@ contract IncentiveController is IIncentiveController {
 
     function getForecast(address household, uint256 slot) external view returns (Forecast memory) {
         return forecasts[household][slot];
+    }
+
+    /// @notice Verbrauchs- und PV-Abweichung (in Promille) für einen Slot, direkt
+    ///         aus den gespeicherten Forecast-/Actual-Werten berechnet - fürs
+    ///         Dashboard (Prognose vs. Ist), ohne ScoreUpdated-Events durchsuchen
+    ///         zu müssen. productionDeviation ist 0, falls keine PV-Prognose vorliegt.
+    function getDeviations(address household, uint256 slot)
+        external
+        view
+        returns (uint256 consumptionDeviation, uint256 productionDeviation)
+    {
+        Forecast memory f = forecasts[household][slot];
+        Actual memory a = actuals[household][slot];
+
+        consumptionDeviation = _calculateDeviation(f.expectedConsumptionWh, a.actualConsumptionWh);
+        if (f.expectedProductionWh > 0) {
+            productionDeviation = _calculateDeviation(f.expectedProductionWh, a.actualProductionWh);
+        }
     }
 
     function getActual(address household, uint256 slot) external view returns (Actual memory) {

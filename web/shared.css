@@ -160,6 +160,7 @@
   button:disabled {
       background: #333944;
       cursor: not-allowed;
+      opacity: 0.45;
   }
 
   button.secondary {
@@ -644,6 +645,25 @@
       overflow: hidden;
       display: flex;
       justify-content: flex-end;
+  }
+
+  /* Windowed chart (paged via nav buttons instead of scrolling) */
+  .chart-window {
+      overflow: hidden;
+  }
+
+  .chart-nav {
+      display: flex;
+      gap: 4px;
+      flex-shrink: 0;
+  }
+
+  .chart-nav-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
   }
 
   .chart-legend {

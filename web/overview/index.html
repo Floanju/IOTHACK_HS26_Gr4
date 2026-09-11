@@ -52,12 +52,24 @@
 </div>
 
 <div class="panel">
+  <h2>Time <span class="muted" style="font-weight:400; font-size:12px;">— drives the table and every chart below, together</span></h2>
+  <div class="chart-nav-bar" style="margin-bottom:0;">
+    <div class="chart-nav">
+      <button class="small secondary" id="navBack" onclick="navTime('back')" title="Back one settlement">◀</button>
+      <button class="small secondary" id="navNow" onclick="navTime('now')">Now</button>
+      <button class="small secondary" id="navFwd" onclick="navTime('fwd')" title="Forward one settlement">▶</button>
+    </div>
+    <span class="muted" id="navRangeLabel" style="font-size:11px;"></span>
+  </div>
+</div>
+
+<div class="panel">
   <h2>Accounts</h2>
   <table id="accountsTable">
     <thead>
       <tr>
         <th>Address</th><th>Type</th><th>Consumption</th><th>Production</th>
-        <th>Change in last settlement</th><th>Battery</th><th>Price factor</th>
+        <th>Settlement change</th><th>Battery</th><th>Price factor</th>
       </tr>
     </thead>
     <tbody></tbody>
@@ -77,7 +89,7 @@
 </div>
 
 <div class="panel">
-  <h2>Battery history <span class="muted" style="font-weight:400; font-size:12px;">— per account, SoC over time</span></h2>
+  <h2>Battery history <span class="muted" style="font-weight:400; font-size:12px;">— per account, same time window as above</span></h2>
   <div class="chart-legend">
     <span><span class="swatch" style="background:#1c6b41;"></span>Charging</span>
     <span><span class="swatch" style="background:#3a3f4a;"></span>Idle</span>
@@ -100,6 +112,55 @@ const BATT_CHART_HEIGHT = 110;
 const BATT_POINT_SLOT = 26;
 let battChartUid = 0;
 let cpChartUid = 0;
+
+// Single global time cursor shared by the table and every chart on this
+// page. { allSlots, capacity, offset, entries, oracleR, incentiveR,
+//   managedSet, households, meterByHousehold, batteryByHousehold,
+//   settlementsBySlot, decimals, symbol }
+let timeState = null;
+
+function groupByHouseholdSorted(events) {
+  const map = groupByHousehold(events);
+  for (const k of Object.keys(map)) {
+    map[k].sort((a, b) => Number(a.returnValues.slot) - Number(b.returnValues.slot));
+  }
+  return map;
+}
+
+// Index of the latest entry in an ascending-by-slot array whose slot <= focusSlot, or -1.
+function latestIndexAtOrBefore(sortedEvents, focusSlot) {
+  let idx = -1;
+  for (let i = 0; i < sortedEvents.length; i++) {
+    if (Number(sortedEvents[i].returnValues.slot) <= focusSlot) idx = i; else break;
+  }
+  return idx;
+}
+
+// Groups EnergyTraded events by their settlement slot, each pre-reduced to a
+// net-amount-per-address map, so we can look up "the settlement as of any
+// point in time" without re-scanning every event on every nav click.
+function buildSettlementsBySlot(energyEvents) {
+  const bySlot = {};
+  for (const e of energyEvents) {
+    const slotNum = Number(e.returnValues.slot);
+    const { producer, consumer, amountPaid } = e.returnValues;
+    const net = (bySlot[slotNum] = bySlot[slotNum] || {});
+    net[producer] = (net[producer] || 0n) + BigInt(amountPaid);
+    net[consumer] = (net[consumer] || 0n) - BigInt(amountPaid);
+  }
+  return { bySlot, slots: Object.keys(bySlot).map(Number).sort((a, b) => a - b) };
+}
+
+// The most recent settlement at or before focusSlot (i.e. "as of then").
+function settlementNetAsOf(settlementsBySlot, focusSlot) {
+  if (focusSlot === null) return { slot: null, net: {} };
+  const { bySlot, slots } = settlementsBySlot;
+  let chosen = null;
+  for (let i = slots.length - 1; i >= 0; i--) {
+    if (slots[i] <= focusSlot) { chosen = slots[i]; break; }
+  }
+  return { slot: chosen, net: chosen !== null ? bySlot[chosen] : {} };
+}
 
 function fmtToken(raw, decimals) {
   const sign = raw < 0n ? "-" : "";
@@ -166,8 +227,7 @@ async function refreshAll() {
     const fromBlock = Math.max(0, latestBlock - lookback);
     $("lookbackStatus").innerHTML = `<span class="ok">Scanning blocks ${fromBlock} → ${latestBlock} (${latestBlock - fromBlock} blocks).</span>`;
 
-    const [lastSettledSlot, households, producers, managedHouseholds] = await Promise.all([
-      marketR.methods.lastSettledSlot().call(),
+    const [households, producers, managedHouseholds] = await Promise.all([
       marketR.methods.getAllHouseholds().call(),
       marketR.methods.getAllProducers().call().catch(() => []),
       batteryR ? batteryR.methods.getManagedHouseholds().call().catch(() => []) : Promise.resolve([])
@@ -180,28 +240,35 @@ async function refreshAll() {
       oracleR.getPastEvents("BatteryUpdated", { fromBlock, toBlock: "latest" })
     ]);
 
-    const lastSlotStr = lastSettledSlot.toString();
-    const lastSettlementTrades = energyEvents.filter(e => e.returnValues.slot === lastSlotStr);
-    const settlementNet = {};
-    for (const e of lastSettlementTrades) {
-      const { producer, consumer, amountPaid } = e.returnValues;
-      settlementNet[producer] = (settlementNet[producer] || 0n) + BigInt(amountPaid);
-      settlementNet[consumer] = (settlementNet[consumer] || 0n) - BigInt(amountPaid);
-    }
-
-    const meterByHousehold = groupByHousehold(meterEvents);
-    const batteryByHousehold = groupByHousehold(batteryEvents);
+    const meterByHousehold = groupByHouseholdSorted(meterEvents);
+    const batteryByHousehold = groupByHouseholdSorted(batteryEvents);
+    const settlementsBySlot = buildSettlementsBySlot(energyEvents);
 
     const entries = [
       ...households.map(a => ({ addr: a, type: "Household" })),
       // The registered producer(s) are the grid owner — no meter/battery of
-      // its own, see renderAccountsTable().
+      // its own, see renderAccountsTableRows().
       ...producers.map(a => ({ addr: a, type: "Grid owner", isGrid: true }))
     ];
 
-    await renderAccountsTable(entries, oracleR, incentiveR, managedSet, batteryByHousehold, settlementNet, decimals, symbol);
-    renderConsumptionCharts(households, meterByHousehold);
-    renderBatteryCharts(households.filter(a => managedSet.has(a.toLowerCase())), batteryByHousehold);
+    // The shared time axis is the union of every slot seen in either event
+    // log — the same axis the table and both charts below page through together.
+    const slotSet = new Set();
+    for (const k of Object.keys(meterByHousehold)) meterByHousehold[k].forEach(e => slotSet.add(Number(e.returnValues.slot)));
+    for (const k of Object.keys(batteryByHousehold)) batteryByHousehold[k].forEach(e => slotSet.add(Number(e.returnValues.slot)));
+    const allSlots = [...slotSet].sort((a, b) => a - b);
+
+    const availableWidth = Math.max(($("cpCharts").clientWidth || 600) - 32, 120);
+    const capacity = Math.max(2, Math.floor(availableWidth / CP_BAR_SLOT));
+    const offset = allSlots.length > 0 ? Math.max(0, allSlots.length - capacity) : 0;
+
+    timeState = {
+      allSlots, capacity, offset, entries, households, oracleR, incentiveR, managedSet,
+      meterByHousehold, batteryByHousehold, settlementsBySlot, decimals, symbol
+    };
+
+    buildChartSkeletons();
+    await renderTimeWindow();
 
   } catch (e) {
     console.error(e);
@@ -236,25 +303,11 @@ async function renderPrices(marketR, decimals, symbol) {
 //  Accounts table
 // ─────────────────────────────────────────────────────────────
 
-function deriveBatteryState(addr, batteryByHousehold) {
-  const events = batteryByHousehold[addr.toLowerCase()];
-  if (!events || events.length < 2) return null;
-  const sorted = events.slice().sort((a, b) => Number(a.returnValues.slot) - Number(b.returnValues.slot));
-  const prev = Number(sorted[sorted.length - 2].returnValues.soc);
-  const curr = Number(sorted[sorted.length - 1].returnValues.soc);
-  if (curr > prev) return { cls: "charging", label: "Charging" };
-  if (curr < prev) return { cls: "discharging", label: "Discharging" };
-  return { cls: "idle", label: "Idle" };
-}
-
-function batteryCellHtml(addr, battery, batteryByHousehold) {
-  if (!battery) return '<span class="muted">—</span>';
-  const socPercent = Number(battery.socPercent);
-  const capacityWh = BigInt(battery.capacityWh);
-  const state = deriveBatteryState(addr, batteryByHousehold);
+function batteryCellHtml(socPercent, capacityWh, state) {
+  if (socPercent === null || capacityWh === null) return '<span class="muted">—</span>';
   const stateHtml = state
     ? `<div class="batt-state ${state.cls}">${state.label}</div>`
-    : `<div class="batt-state unknown">Unknown (widen lookback)</div>`;
+    : `<div class="batt-state unknown">Unknown</div>`;
   return `
     <div style="min-width:120px;">
       ${stateHtml}
@@ -274,34 +327,61 @@ function priceFactorHtml(multiplier) {
   return `<span class="pricefactor ${cls}">×${(m / 1000).toFixed(2)} (${sign}${pct.toFixed(1)}%)</span>`;
 }
 
-async function renderAccountsTable(entries, oracleR, incentiveR, managedSet, batteryByHousehold, settlementNet, decimals, symbol) {
+async function renderAccountsTableRows(focusSlot) {
+  if (!timeState) return;
+  const { entries, oracleR, incentiveR, managedSet, meterByHousehold, batteryByHousehold, settlementsBySlot, decimals, symbol } = timeState;
   const tbody = document.querySelector("#accountsTable tbody");
-  tbody.innerHTML = "";
 
   if (entries.length === 0) {
+    tbody.innerHTML = "";
     $("accountsStatus").innerHTML = `<span class="muted">No households or producers registered.</span>`;
     return;
   }
 
-  const rows = await Promise.all(entries.map(async (e) => {
-    let consumptionWh = null, productionWh = null, battery = null, priceFactor = null;
-    const hasBattery = !e.isGrid && managedSet.has(e.addr.toLowerCase());
+  const { net: settlementNet, slot: settlementSlot } = settlementNetAsOf(settlementsBySlot, focusSlot);
 
-    if (!e.isGrid) {
-      try {
-        const reading = await oracleR.methods.getLatestMeterReading(e.addr).call();
-        consumptionWh = reading.consumptionWh;
-        productionWh = reading.productionWh;
-      } catch (err) {}
+  // Consumption/production/battery are read from the historical event log at
+  // (or just before) focusSlot, not "latest" — so the table pages back in
+  // time along with the charts. Battery capacity is treated as static config
+  // and still fetched live; only its SoC/state are historical. Price factor
+  // has no historical getter on IncentiveController, so it always reflects
+  // the current live multiplier regardless of the selected slot.
+  const rows = await Promise.all(entries.map(async (e) => {
+    const key = e.addr.toLowerCase();
+    let consumptionWh = null, productionWh = null, socPercent = null, batteryState = null, capacityWh = null, priceFactor = null;
+    const hasBattery = !e.isGrid && managedSet.has(key);
+
+    if (!e.isGrid && focusSlot !== null) {
+      const mEvents = meterByHousehold[key] || [];
+      const mIdx = latestIndexAtOrBefore(mEvents, focusSlot);
+      if (mIdx >= 0) {
+        consumptionWh = mEvents[mIdx].returnValues.consumption;
+        productionWh = mEvents[mIdx].returnValues.production;
+      }
+
       if (hasBattery) {
-        try { battery = await oracleR.methods.getLatestBatteryState(e.addr).call(); } catch (err) {}
+        const bEvents = batteryByHousehold[key] || [];
+        const bIdx = latestIndexAtOrBefore(bEvents, focusSlot);
+        if (bIdx >= 0) {
+          socPercent = Number(bEvents[bIdx].returnValues.soc);
+          if (bIdx >= 1) {
+            const prevSoc = Number(bEvents[bIdx - 1].returnValues.soc);
+            batteryState = socPercent > prevSoc ? { cls: "charging", label: "Charging" }
+              : socPercent < prevSoc ? { cls: "discharging", label: "Discharging" }
+              : { cls: "idle", label: "Idle" };
+          }
+          try {
+            const battery = await oracleR.methods.getLatestBatteryState(e.addr).call();
+            capacityWh = BigInt(battery.capacityWh);
+          } catch (err) {}
+        }
       }
     }
     if (incentiveR) {
       try { priceFactor = await incentiveR.methods.getPriceMultiplier(e.addr).call(); } catch (err) {}
     }
 
-    return { ...e, consumptionWh, productionWh, battery, priceFactor, settlementChange: settlementNet[e.addr] || 0n };
+    return { ...e, consumptionWh, productionWh, socPercent, batteryState, capacityWh, priceFactor, settlementChange: settlementNet[e.addr] || 0n };
   }));
 
   // The grid owner has no meter of its own — derive its consumption/production
@@ -323,6 +403,7 @@ async function renderAccountsTable(entries, oracleR, incentiveR, managedSet, bat
     }
   }
 
+  tbody.innerHTML = "";
   for (const r of rows) {
     const tr = document.createElement("tr");
     const consTxt = r.consumptionWh !== null ? fmtToken(BigInt(r.consumptionWh), 3) + " kWh" : "?";
@@ -333,59 +414,157 @@ async function renderAccountsTable(entries, oracleR, incentiveR, managedSet, bat
       <td>${consTxt}</td>
       <td>${prodTxt}</td>
       <td>${fmtSigned(r.settlementChange, decimals, symbol)}</td>
-      <td>${batteryCellHtml(r.addr, r.battery, batteryByHousehold)}</td>
+      <td>${batteryCellHtml(r.socPercent, r.capacityWh, r.batteryState)}</td>
       <td>${priceFactorHtml(r.priceFactor)}</td>
     `;
     tbody.appendChild(tr);
   }
-  $("accountsStatus").innerHTML = `<span class="ok">${rows.length} account(s).</span>`;
+
+  $("accountsStatus").innerHTML = focusSlot === null
+    ? `<span class="muted">No data in the current lookback window.</span>`
+    : `<span class="ok">${rows.length} account(s) — as of slot ${focusSlot}${settlementSlot !== null ? ` (last settlement as of then: slot ${settlementSlot})` : ` (no settlement yet)`}.</span>`;
 }
 
 // ─────────────────────────────────────────────────────────────
-//  Consumption vs. production — per account
+//  Shared time window — builds card skeletons once, then re-renders the
+//  table + both charts together on every nav click.
 // ─────────────────────────────────────────────────────────────
 
-function renderConsumptionCharts(households, meterByHousehold) {
-  const container = $("cpCharts");
-  container.innerHTML = "";
+function buildChartSkeletons() {
+  const cpContainer = $("cpCharts");
+  const battContainer = $("battCharts");
+  cpContainer.innerHTML = "";
+  battContainer.innerHTML = "";
+
+  const { households, meterByHousehold, batteryByHousehold, managedSet } = timeState;
 
   if (!households || households.length === 0) {
     $("cpStatus").innerHTML = `<span class="muted">No households registered.</span>`;
+    $("battStatus").innerHTML = `<span class="muted">No households have a battery registered with BatteryManager.</span>`;
     return;
   }
 
-  let anyData = false;
+  let anyMeterData = false;
   for (const addr of households) {
-    const events = (meterByHousehold[addr.toLowerCase()] || []).slice()
-      .sort((a, b) => Number(a.returnValues.slot) - Number(b.returnValues.slot));
-
+    const key = addr.toLowerCase();
     const card = document.createElement("div");
     card.className = "acct-chart-card";
-
-    if (events.length === 0) {
+    if ((meterByHousehold[key] || []).length === 0) {
       card.innerHTML = `<h3 title="${addr}">${short(addr)}</h3><div class="chart-meta muted">No meter readings in the current lookback window.</div>`;
-      container.appendChild(card);
+      cpContainer.appendChild(card);
       continue;
     }
-    anyData = true;
-
-    const points = events.map(e => ({
-      slot: e.returnValues.slot,
-      consumption: BigInt(e.returnValues.consumption),
-      production: BigInt(e.returnValues.production)
-    }));
-
-    card.innerHTML = `<h3 title="${addr}">${short(addr)}</h3><div class="chart-meta">${points.length} reading(s) — slot ${points[0].slot} → ${points[points.length - 1].slot}</div>`;
-    const scrollWrap = document.createElement("div");
-    scrollWrap.className = "chart-scroll";
-    scrollWrap.appendChild(buildConsumptionSvg(points));
-    card.appendChild(scrollWrap);
-    container.appendChild(card);
+    anyMeterData = true;
+    card.innerHTML = `<h3 title="${addr}">${short(addr)}</h3><div class="chart-meta" data-cp-meta="${key}"></div>`;
+    const wrap = document.createElement("div");
+    wrap.className = "chart-window";
+    wrap.setAttribute("data-cp-chart", key);
+    card.appendChild(wrap);
+    cpContainer.appendChild(card);
   }
-
-  $("cpStatus").innerHTML = anyData
+  $("cpStatus").innerHTML = anyMeterData
     ? `<span class="ok">${households.length} account(s).</span>`
     : `<span class="muted">No meter readings in the current lookback window for any account — widen it above.</span>`;
+
+  const batteryHouseholds = households.filter(a => managedSet.has(a.toLowerCase()));
+  if (batteryHouseholds.length === 0) {
+    $("battStatus").innerHTML = `<span class="muted">No households have a battery registered with BatteryManager.</span>`;
+    return;
+  }
+  let anyBattData = false;
+  for (const addr of batteryHouseholds) {
+    const key = addr.toLowerCase();
+    const card = document.createElement("div");
+    card.className = "acct-chart-card";
+    if ((batteryByHousehold[key] || []).length === 0) {
+      card.innerHTML = `<h3 title="${addr}">${short(addr)}</h3><div class="chart-meta muted">No battery readings in the current lookback window.</div>`;
+      battContainer.appendChild(card);
+      continue;
+    }
+    anyBattData = true;
+    card.innerHTML = `<h3 title="${addr}">${short(addr)}</h3><div class="chart-meta" data-batt-meta="${key}"></div>`;
+    const wrap = document.createElement("div");
+    wrap.className = "chart-window";
+    wrap.setAttribute("data-batt-chart", key);
+    card.appendChild(wrap);
+    battContainer.appendChild(card);
+  }
+  $("battStatus").innerHTML = anyBattData
+    ? `<span class="ok">${batteryHouseholds.length} account(s).</span>`
+    : `<span class="muted">No battery readings in the current lookback window — widen it above.</span>`;
+}
+
+async function renderTimeWindow() {
+  if (!timeState) { updateNavUI([]); return; }
+  const { allSlots, offset, capacity, meterByHousehold, batteryByHousehold } = timeState;
+  const windowSlots = allSlots.slice(offset, offset + capacity);
+  const startSlot = windowSlots.length > 0 ? windowSlots[0] : null;
+  const endSlot = windowSlots.length > 0 ? windowSlots[windowSlots.length - 1] : null;
+
+  for (const key of Object.keys(meterByHousehold)) {
+    const wrap = document.querySelector(`[data-cp-chart="${key}"]`);
+    if (!wrap) continue;
+    const visible = startSlot === null ? [] : meterByHousehold[key]
+      .filter(e => { const s = Number(e.returnValues.slot); return s >= startSlot && s <= endSlot; })
+      .map(e => ({ slot: Number(e.returnValues.slot), consumption: BigInt(e.returnValues.consumption), production: BigInt(e.returnValues.production) }));
+    wrap.innerHTML = "";
+    wrap.appendChild(buildConsumptionSvg(visible));
+    const meta = document.querySelector(`[data-cp-meta="${key}"]`);
+    if (meta) meta.textContent = visible.length > 0 ? `${visible.length} reading(s) in this window` : `No readings in this window`;
+  }
+
+  for (const key of Object.keys(batteryByHousehold)) {
+    const wrap = document.querySelector(`[data-batt-chart="${key}"]`);
+    if (!wrap) continue;
+    const meta = document.querySelector(`[data-batt-meta="${key}"]`);
+    const visible = startSlot === null ? [] : batteryByHousehold[key]
+      .filter(e => { const s = Number(e.returnValues.slot); return s >= startSlot && s <= endSlot; })
+      .map(e => ({ slot: Number(e.returnValues.slot), soc: Number(e.returnValues.soc) }));
+
+    if (visible.length < 2) {
+      wrap.innerHTML = `<div class="muted" style="font-size:11px;">Not enough battery readings in this window to chart a trend.</div>`;
+      if (meta) meta.textContent = visible.length === 1 ? `${visible[0].soc}% at slot ${visible[0].slot}` : "";
+      continue;
+    }
+    wrap.innerHTML = "";
+    wrap.appendChild(buildBatterySvg(visible));
+    const last = visible[visible.length - 1], prev = visible[visible.length - 2];
+    const state = last.soc > prev.soc ? { cls: "charging", label: "Charging" }
+      : last.soc < prev.soc ? { cls: "discharging", label: "Discharging" }
+      : { cls: "idle", label: "Idle" };
+    if (meta) meta.innerHTML = `<span class="batt-state ${state.cls}" style="display:inline;">${state.label}</span> — ${last.soc}% · ${visible.length} reading(s) in this window`;
+  }
+
+  await renderAccountsTableRows(endSlot);
+  updateNavUI(windowSlots);
+}
+
+function navTime(direction) {
+  if (!timeState) return;
+  const maxOffset = Math.max(0, timeState.allSlots.length - timeState.capacity);
+  if (direction === "back") timeState.offset = Math.max(0, timeState.offset - 1);
+  else if (direction === "fwd") timeState.offset = Math.min(maxOffset, timeState.offset + 1);
+  else if (direction === "now") timeState.offset = maxOffset;
+  renderTimeWindow();
+}
+
+function updateNavUI(windowSlots) {
+  const rangeEl = $("navRangeLabel");
+  const backBtn = $("navBack"), fwdBtn = $("navFwd"), nowBtn = $("navNow");
+
+  if (!timeState || timeState.allSlots.length === 0) {
+    if (rangeEl) rangeEl.textContent = "";
+    [backBtn, fwdBtn, nowBtn].forEach(b => { if (b) b.disabled = true; });
+    return;
+  }
+
+  const maxOffset = Math.max(0, timeState.allSlots.length - timeState.capacity);
+  if (rangeEl && windowSlots.length > 0) {
+    rangeEl.textContent = `Slot ${windowSlots[0]} → ${windowSlots[windowSlots.length - 1]} (of ${timeState.allSlots.length} total)`;
+  }
+  if (backBtn) backBtn.disabled = timeState.offset <= 0;
+  if (fwdBtn) fwdBtn.disabled = timeState.offset >= maxOffset;
+  if (nowBtn) nowBtn.disabled = timeState.offset >= maxOffset;
 }
 
 function buildConsumptionSvg(points) {
@@ -456,67 +635,6 @@ function buildConsumptionSvg(points) {
 // ─────────────────────────────────────────────────────────────
 //  Battery history — per account, Android-style SoC area chart
 // ─────────────────────────────────────────────────────────────
-
-function renderBatteryCharts(households, batteryByHousehold) {
-  const container = $("battCharts");
-  container.innerHTML = "";
-
-  if (!households || households.length === 0) {
-    $("battStatus").innerHTML = `<span class="muted">No households have a battery registered with BatteryManager.</span>`;
-    return;
-  }
-
-  let anyData = false;
-  for (const addr of households) {
-    const events = (batteryByHousehold[addr.toLowerCase()] || []).slice()
-      .sort((a, b) => Number(a.returnValues.slot) - Number(b.returnValues.slot));
-
-    const card = document.createElement("div");
-    card.className = "acct-chart-card";
-
-    if (events.length < 2) {
-      card.innerHTML = `<h3 title="${addr}">${short(addr)}</h3><div class="chart-meta muted">Not enough battery readings in the current lookback window to chart a trend.</div>`;
-      container.appendChild(card);
-      continue;
-    }
-    anyData = true;
-
-    const points = events.map(e => ({ slot: e.returnValues.slot, soc: Number(e.returnValues.soc) }));
-    const last = points[points.length - 1];
-    const prev = points[points.length - 2];
-    const state = last.soc > prev.soc ? { cls: "charging", label: "Charging" }
-      : last.soc < prev.soc ? { cls: "discharging", label: "Discharging" }
-      : { cls: "idle", label: "Idle" };
-
-    card.innerHTML = `
-      <h3 title="${addr}">${short(addr)}</h3>
-      <div class="chart-meta">Currently <span class="batt-state ${state.cls}" style="display:inline;">${state.label}</span> — ${last.soc}% · ${points.length} reading(s), slot ${points[0].slot} → ${last.slot}</div>
-    `;
-    const chartWrap = document.createElement("div");
-    chartWrap.className = "chart-fixed";
-    card.appendChild(chartWrap);
-    container.appendChild(card); // attach first so its width can be measured
-
-    // No horizontal scrolling here: if there isn't room for every reading,
-    // just show the most recent ones (right-anchored) instead of a scrollbar.
-    const availableWidth = Math.max(chartWrap.clientWidth || card.clientWidth || 260, 120);
-    const maxPoints = Math.max(2, Math.floor(availableWidth / BATT_POINT_SLOT));
-    const visiblePoints = points.length > maxPoints ? points.slice(points.length - maxPoints) : points;
-
-    chartWrap.appendChild(buildBatterySvg(visiblePoints));
-    if (visiblePoints.length < points.length) {
-      const note = document.createElement("div");
-      note.className = "muted";
-      note.style.cssText = "font-size:10px; margin-top:4px;";
-      note.textContent = `Showing the most recent ${visiblePoints.length} of ${points.length} readings.`;
-      card.appendChild(note);
-    }
-  }
-
-  $("battStatus").innerHTML = anyData
-    ? `<span class="ok">${households.length} account(s).</span>`
-    : `<span class="muted">Not enough battery readings in the current lookback window — widen it above.</span>`;
-}
 
 function buildBatterySvg(points) {
   const width = Math.max((points.length - 1) * BATT_POINT_SLOT + 20, 200);

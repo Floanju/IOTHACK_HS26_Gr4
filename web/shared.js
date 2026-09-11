@@ -120,6 +120,47 @@ const INCENTIVE_ABI = [
 
 const $ = id => document.getElementById(id);
 
+// ─────────────────────────────────────────────────────────────
+//  Chart hover tooltip — a single floating div reused by every SVG chart on
+//  the page. Attach it to a hoverable element via attachChartTooltip(el, fn),
+//  where fn returns the HTML to show (or null/"" to hide).
+// ─────────────────────────────────────────────────────────────
+
+function getChartTooltipEl() {
+    let el = document.getElementById("chartTooltip");
+    if (!el) {
+        el = document.createElement("div");
+        el.id = "chartTooltip";
+        el.className = "chart-tooltip";
+        document.body.appendChild(el);
+    }
+    return el;
+}
+
+function positionChartTooltip(evt) {
+    const el = getChartTooltipEl();
+    const pad = 14;
+    let x = evt.clientX + pad, y = evt.clientY + pad;
+    const rect = el.getBoundingClientRect();
+    if (x + rect.width > window.innerWidth) x = evt.clientX - rect.width - pad;
+    if (y + rect.height > window.innerHeight) y = evt.clientY - rect.height - pad;
+    el.style.left = `${Math.max(0, x)}px`;
+    el.style.top = `${Math.max(0, y)}px`;
+}
+
+function attachChartTooltip(el, contentFn) {
+    el.addEventListener("mouseenter", (evt) => {
+        const html = contentFn(evt);
+        if (!html) return;
+        const tip = getChartTooltipEl();
+        tip.innerHTML = html;
+        tip.style.display = "block";
+        positionChartTooltip(evt);
+    });
+    el.addEventListener("mousemove", positionChartTooltip);
+    el.addEventListener("mouseleave", () => { getChartTooltipEl().style.display = "none"; });
+}
+
 // Optional address -> friendly id map, loaded from the "Household labels"
 // panel in the header. short() is used everywhere addresses are displayed
 // (tables, chart titles, etc.), so overriding it here is enough to relabel

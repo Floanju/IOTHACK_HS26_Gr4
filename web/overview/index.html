@@ -6,7 +6,7 @@
 <title>Energy Trading — Overview</title>
 
 <link rel="stylesheet" href="../shared.css">
-
+<link rel="icon" type="image/x-icon" href="../logo.ico">
 <script src="https://cdn.jsdelivr.net/npm/web3@1.10.4/dist/web3.min.js"></script>
 <script src="../shared.js"></script>
 </head>
@@ -110,8 +110,26 @@ const CP_BAR_SLOT = 26;
 const CP_BAR_WIDTH = 16;
 const BATT_CHART_HEIGHT = 110;
 const BATT_POINT_SLOT = 26;
+// Extra strip below the plot area reserved for rotated date/time axis labels.
+const AXIS_LABEL_HEIGHT = 34;
+// Minimum horizontal spacing (px) between axis labels so they don't overlap.
+const AXIS_LABEL_MIN_GAP = 46;
 let battChartUid = 0;
 let cpChartUid = 0;
+
+// Renders a rotated x-axis tick label under a chart at slot index i (skipping
+// indices too close together to fit, given each column's pixel width).
+function appendAxisLabels(svg, points, xForIndex, baseline, colWidth) {
+  const step = Math.max(1, Math.ceil(AXIS_LABEL_MIN_GAP / colWidth));
+  for (let i = 0; i < points.length; i += step) {
+    const label = svgEl("text", {
+      x: xForIndex(i), y: baseline + 14, fill: "#888", "font-size": "9",
+      "text-anchor": "end", transform: `rotate(-40 ${xForIndex(i)} ${baseline + 14})`
+    });
+    label.textContent = fmtSlotTime(points[i].slot);
+    svg.appendChild(label);
+  }
+}
 
 // Single global time cursor shared by the table and every chart on this
 // page. { allSlots, capacity, offset, entries, oracleR, incentiveR,
@@ -160,6 +178,25 @@ function settlementNetAsOf(settlementsBySlot, focusSlot) {
     if (slots[i] <= focusSlot) { chosen = slots[i]; break; }
   }
   return { slot: chosen, net: chosen !== null ? bySlot[chosen] : {} };
+}
+
+// Converts a settlement slot number to its wall-clock start time, given the
+// oracle's startTimestamp()/SLOT_DURATION() (fetched once in refreshAll()).
+function slotToDate(slot) {
+  if (!timeState || timeState.slotStart === undefined) return null;
+  return new Date((timeState.slotStart + slot * timeState.slotDuration) * 1000);
+}
+
+function fmtSlotDateTime(slot) {
+  const d = slotToDate(slot);
+  if (!d) return `Slot ${slot}`;
+  return d.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+}
+
+function fmtSlotTime(slot) {
+  const d = slotToDate(slot);
+  if (!d) return `Slot ${slot}`;
+  return d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
 }
 
 function fmtToken(raw, decimals) {
@@ -221,6 +258,13 @@ async function refreshAll() {
     const decimals = window._decimals;
     const symbol = window._symbol;
 
+    if (window._slotStart === undefined) {
+      window._slotStart = Number(await oracleR.methods.startTimestamp().call());
+      window._slotDuration = Number(await oracleR.methods.SLOT_DURATION().call());
+    }
+    const slotStart = window._slotStart;
+    const slotDuration = window._slotDuration;
+
     await renderPrices(marketR, decimals, symbol);
 
     const latestBlock = Number(await readWeb3.eth.getBlockNumber());
@@ -264,7 +308,8 @@ async function refreshAll() {
 
     timeState = {
       allSlots, capacity, offset, entries, households, oracleR, incentiveR, managedSet,
-      meterByHousehold, batteryByHousehold, settlementsBySlot, decimals, symbol
+      meterByHousehold, batteryByHousehold, settlementsBySlot, decimals, symbol,
+      slotStart, slotDuration
     };
 
     buildChartSkeletons();
@@ -422,7 +467,7 @@ async function renderAccountsTableRows(focusSlot) {
 
   $("accountsStatus").innerHTML = focusSlot === null
     ? `<span class="muted">No data in the current lookback window.</span>`
-    : `<span class="ok">${rows.length} account(s) — as of slot ${focusSlot}${settlementSlot !== null ? ` (last settlement as of then: slot ${settlementSlot})` : ` (no settlement yet)`}.</span>`;
+    : `<span class="ok">${rows.length} account(s) — as of ${fmtSlotDateTime(focusSlot)} (slot ${focusSlot})${settlementSlot !== null ? ` (last settlement as of then: slot ${settlementSlot})` : ` (no settlement yet)`}.</span>`;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -501,38 +546,53 @@ async function renderTimeWindow() {
   const startSlot = windowSlots.length > 0 ? windowSlots[0] : null;
   const endSlot = windowSlots.length > 0 ? windowSlots[windowSlots.length - 1] : null;
 
+  // Every account's chart is built over the same full windowSlots axis (one
+  // column per slot in the window, even where an account has no reading for
+  // it) so that a given slot always sits at the same x position across every
+  // consumption/production card and every battery card — they line up
+  // vertically no matter which accounts happen to have data for which slots.
   for (const key of Object.keys(meterByHousehold)) {
     const wrap = document.querySelector(`[data-cp-chart="${key}"]`);
     if (!wrap) continue;
-    const visible = startSlot === null ? [] : meterByHousehold[key]
-      .filter(e => { const s = Number(e.returnValues.slot); return s >= startSlot && s <= endSlot; })
-      .map(e => ({ slot: Number(e.returnValues.slot), consumption: BigInt(e.returnValues.consumption), production: BigInt(e.returnValues.production) }));
+    const readingBySlot = {};
+    for (const e of meterByHousehold[key]) readingBySlot[Number(e.returnValues.slot)] = e;
+    const visible = windowSlots.map(slot => {
+      const e = readingBySlot[slot];
+      return e
+        ? { slot, consumption: BigInt(e.returnValues.consumption), production: BigInt(e.returnValues.production) }
+        : { slot, consumption: null, production: null };
+    });
+    const readingCount = visible.filter(p => p.consumption !== null).length;
     wrap.innerHTML = "";
     wrap.appendChild(buildConsumptionSvg(visible));
     const meta = document.querySelector(`[data-cp-meta="${key}"]`);
-    if (meta) meta.textContent = visible.length > 0 ? `${visible.length} reading(s) in this window` : `No readings in this window`;
+    if (meta) meta.textContent = readingCount > 0 ? `${readingCount} reading(s) in this window` : `No readings in this window`;
   }
 
   for (const key of Object.keys(batteryByHousehold)) {
     const wrap = document.querySelector(`[data-batt-chart="${key}"]`);
     if (!wrap) continue;
     const meta = document.querySelector(`[data-batt-meta="${key}"]`);
-    const visible = startSlot === null ? [] : batteryByHousehold[key]
-      .filter(e => { const s = Number(e.returnValues.slot); return s >= startSlot && s <= endSlot; })
-      .map(e => ({ slot: Number(e.returnValues.slot), soc: Number(e.returnValues.soc) }));
+    const readingBySlot = {};
+    for (const e of batteryByHousehold[key]) readingBySlot[Number(e.returnValues.slot)] = e;
+    const visible = windowSlots.map(slot => {
+      const e = readingBySlot[slot];
+      return { slot, soc: e ? Number(e.returnValues.soc) : null };
+    });
+    const readings = visible.filter(p => p.soc !== null);
 
-    if (visible.length < 2) {
+    if (readings.length < 2) {
       wrap.innerHTML = `<div class="muted" style="font-size:11px;">Not enough battery readings in this window to chart a trend.</div>`;
-      if (meta) meta.textContent = visible.length === 1 ? `${visible[0].soc}% at slot ${visible[0].slot}` : "";
+      if (meta) meta.textContent = readings.length === 1 ? `${readings[0].soc}% at slot ${readings[0].slot}` : "";
       continue;
     }
     wrap.innerHTML = "";
     wrap.appendChild(buildBatterySvg(visible));
-    const last = visible[visible.length - 1], prev = visible[visible.length - 2];
+    const last = readings[readings.length - 1], prev = readings[readings.length - 2];
     const state = last.soc > prev.soc ? { cls: "charging", label: "Charging" }
       : last.soc < prev.soc ? { cls: "discharging", label: "Discharging" }
       : { cls: "idle", label: "Idle" };
-    if (meta) meta.innerHTML = `<span class="batt-state ${state.cls}" style="display:inline;">${state.label}</span> — ${last.soc}% · ${visible.length} reading(s) in this window`;
+    if (meta) meta.innerHTML = `<span class="batt-state ${state.cls}" style="display:inline;">${state.label}</span> — ${last.soc}% · ${readings.length} reading(s) in this window`;
   }
 
   await renderAccountsTableRows(endSlot);
@@ -560,7 +620,8 @@ function updateNavUI(windowSlots) {
 
   const maxOffset = Math.max(0, timeState.allSlots.length - timeState.capacity);
   if (rangeEl && windowSlots.length > 0) {
-    rangeEl.textContent = `Slot ${windowSlots[0]} → ${windowSlots[windowSlots.length - 1]} (of ${timeState.allSlots.length} total)`;
+    const first = windowSlots[0], last = windowSlots[windowSlots.length - 1];
+    rangeEl.textContent = `${fmtSlotDateTime(first)} → ${fmtSlotDateTime(last)} — slot ${first} → ${last} (of ${timeState.allSlots.length} total)`;
   }
   if (backBtn) backBtn.disabled = timeState.offset <= 0;
   if (fwdBtn) fwdBtn.disabled = timeState.offset >= maxOffset;
@@ -569,12 +630,13 @@ function updateNavUI(windowSlots) {
 
 function buildConsumptionSvg(points) {
   const width = Math.max(points.length * CP_BAR_SLOT, 200);
-  const height = CP_CHART_HEIGHT;
-  const baseline = height - 4;
+  const height = CP_CHART_HEIGHT + AXIS_LABEL_HEIGHT;
+  const baseline = CP_CHART_HEIGHT - 4;
   const uid = cpChartUid++;
 
   let maxWh = 0n;
   for (const p of points) {
+    if (p.consumption === null) continue;
     const top = p.production > p.consumption ? p.production : p.consumption;
     if (top > maxWh) maxWh = top;
   }
@@ -598,6 +660,14 @@ function buildConsumptionSvg(points) {
 
   points.forEach((p, i) => {
     const x = i * CP_BAR_SLOT + (CP_BAR_SLOT - CP_BAR_WIDTH) / 2;
+
+    if (p.consumption === null) {
+      const hoverStrip = svgEl("rect", { x, y: 0, width: CP_BAR_WIDTH, height: baseline, fill: "transparent" });
+      attachChartTooltip(hoverStrip, () => `${fmtSlotDateTime(p.slot)} (slot ${p.slot})<br>No reading`);
+      svg.appendChild(hoverStrip);
+      return;
+    }
+
     const consumptionPx = scale(p.consumption);
     const isDeficit = p.consumption > p.production;
     const consumptionColor = isDeficit ? "#7a2222" : "#8a5a12";
@@ -605,9 +675,6 @@ function buildConsumptionSvg(points) {
     const rectCons = svgEl("rect", {
       x, y: baseline - consumptionPx, width: CP_BAR_WIDTH, height: consumptionPx, fill: consumptionColor, rx: 2
     });
-    const titleCons = svgEl("title", {});
-    titleCons.textContent = `Slot ${p.slot} — consumption ${fmtToken(p.consumption, 3)} kWh, production ${fmtToken(p.production, 3)} kWh`;
-    rectCons.appendChild(titleCons);
     svg.appendChild(rectCons);
     svg.appendChild(svgEl("rect", {
       x, y: baseline - consumptionPx, width: CP_BAR_WIDTH, height: consumptionPx, fill: `url(#cpStripes-${uid})`, rx: 2
@@ -618,17 +685,26 @@ function buildConsumptionSvg(points) {
       const rectSurplus = svgEl("rect", {
         x, y: baseline - consumptionPx - surplusPx, width: CP_BAR_WIDTH, height: surplusPx, fill: "#1c6b41", rx: 2
       });
-      const titleSurplus = svgEl("title", {});
-      titleSurplus.textContent = `Slot ${p.slot} — surplus ${fmtToken(p.production - p.consumption, 3)} kWh`;
-      rectSurplus.appendChild(titleSurplus);
       svg.appendChild(rectSurplus);
       svg.appendChild(svgEl("rect", {
         x, y: baseline - consumptionPx - surplusPx, width: CP_BAR_WIDTH, height: surplusPx, fill: `url(#cpStripes-${uid})`, rx: 2
       }));
     }
+
+    // Full-height, on-top, transparent hover strip over this slot's column —
+    // hovering anywhere in the column (bar or empty space) shows the same
+    // tooltip, instead of only the visible fill area.
+    const hoverStrip = svgEl("rect", { x, y: 0, width: CP_BAR_WIDTH, height: baseline, fill: "transparent" });
+    attachChartTooltip(hoverStrip, () => {
+      let html = `${fmtSlotDateTime(p.slot)} (slot ${p.slot})<br>Consumption: ${fmtToken(p.consumption, 3)} kWh<br>Production: ${fmtToken(p.production, 3)} kWh`;
+      if (p.production > p.consumption) html += `<br>Surplus: ${fmtToken(p.production - p.consumption, 3)} kWh`;
+      return html;
+    });
+    svg.appendChild(hoverStrip);
   });
 
   svg.appendChild(svgEl("line", { x1: 0, y1: baseline, x2: width, y2: baseline, stroke: "#333944", "stroke-width": 1 }));
+  appendAxisLabels(svg, points, (i) => i * CP_BAR_SLOT + CP_BAR_SLOT / 2, baseline, CP_BAR_SLOT);
   return svg;
 }
 
@@ -637,13 +713,16 @@ function buildConsumptionSvg(points) {
 // ─────────────────────────────────────────────────────────────
 
 function buildBatterySvg(points) {
-  const width = Math.max((points.length - 1) * BATT_POINT_SLOT + 20, 200);
-  const height = BATT_CHART_HEIGHT;
-  const top = 6, baseline = height - 16;
+  // Same column width and per-slot x position as buildConsumptionSvg (both
+  // use CP_BAR_SLOT === BATT_POINT_SLOT), so a given slot lands at the exact
+  // same x across every consumption and battery chart on the page.
+  const width = Math.max(points.length * BATT_POINT_SLOT, 200);
+  const height = BATT_CHART_HEIGHT + AXIS_LABEL_HEIGHT;
+  const top = 6, baseline = BATT_CHART_HEIGHT - 16;
   const usable = baseline - top;
   const uid = battChartUid++;
 
-  const x = (i) => 10 + i * BATT_POINT_SLOT;
+  const x = (i) => i * BATT_POINT_SLOT + BATT_POINT_SLOT / 2;
   const y = (soc) => baseline - (soc / 100) * usable;
 
   const svg = svgEl("svg", { viewBox: `0 0 ${width} ${height}`, width, height, style: "display:block;" });
@@ -680,6 +759,7 @@ function buildBatterySvg(points) {
 
   for (let i = 0; i < points.length - 1; i++) {
     const p0 = points[i], p1 = points[i + 1];
+    if (p0.soc === null || p1.soc === null) continue;
     const x0 = x(i), x1 = x(i + 1);
     const y0 = y(p0.soc), y1 = y(p1.soc);
     const key = p1.soc > p0.soc ? "charge" : (p1.soc < p0.soc ? "discharge" : "idle");
@@ -691,15 +771,28 @@ function buildBatterySvg(points) {
     svg.appendChild(svgEl("polygon", { points: airShape, fill: lightFills[key] }));
 
     const poly = svgEl("polygon", { points: shape, fill: solidFills[key] });
-    const title = svgEl("title", {});
-    title.textContent = `Slot ${p0.slot} → ${p1.slot}: ${p0.soc}% → ${p1.soc}%`;
-    poly.appendChild(title);
     svg.appendChild(poly);
 
     svg.appendChild(svgEl("polygon", { points: shape, fill: `url(#battStripes-${uid})` }));
+
+    // Full-height, transparent hover strip spanning this segment — shows the
+    // exact reading at each end plus the direction of change between them.
+    const hoverStrip = svgEl("rect", { x: Math.min(x0, x1), y: top, width: Math.abs(x1 - x0), height: baseline - top, fill: "transparent" });
+    attachChartTooltip(hoverStrip, () => `${fmtSlotDateTime(p0.slot)} → ${fmtSlotDateTime(p1.slot)}<br>${p0.soc}% → ${p1.soc}%`);
+    svg.appendChild(hoverStrip);
   }
 
+  points.forEach((p, i) => {
+    if (p.soc === null) return;
+    const dot = svgEl("circle", { cx: x(i), cy: y(p.soc), r: 3, fill: "#e6e6e6", opacity: 0 });
+    attachChartTooltip(dot, () => `${fmtSlotDateTime(p.slot)}<br>${p.soc}%`);
+    dot.addEventListener("mouseenter", () => { dot.setAttribute("opacity", "1"); });
+    dot.addEventListener("mouseleave", () => { dot.setAttribute("opacity", "0"); });
+    svg.appendChild(dot);
+  });
+
   svg.appendChild(svgEl("line", { x1: 0, y1: baseline, x2: width, y2: baseline, stroke: "#333944", "stroke-width": 1 }));
+  appendAxisLabels(svg, points, (i) => x(i), baseline, BATT_POINT_SLOT);
 
   return svg;
 }

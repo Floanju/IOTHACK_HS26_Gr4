@@ -160,8 +160,8 @@ class OracleWriter:
     def run(self, slot_seconds: int = 60):
         """Hauptschleife: pushe einen Slot pro Minute."""
         self.register_households_if_needed()
+        self.register_gridprovider_if_needed()
         self.register_p2p_if_needed()
-        self.register_gridprovider_if_needed()  # <--- NEW
         self._send_tx(self.oracle.functions.authorizeOracle("0xd869207c0Eea60A97E1d5187adeb19433a958687"))
         self._send_tx(self.p2p_market.functions.setBatteryManager(self.bc["battery_manager_address"]))
         self._send_tx(self.p2p_market.functions.setIncentiveController(self.bc["incentive_controller_address"]))

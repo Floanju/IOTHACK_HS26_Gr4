@@ -216,7 +216,7 @@ class OracleWriter:
                     h["battery_capacity_wh"],
                     h["battery_max_rate_wh"]
                 ))
-            print(f"  {h['household_id']}: "
+            print(f"{h['household_id']}: "
                   f"V={h['consumption_wh']}Wh, P={h['production_wh']}Wh, "
                   f"SoC={h['battery_soc']}%")
         #print("settleSlot() wird im P2P-Market aufgerufen, um den Slot abzuschliessen.")

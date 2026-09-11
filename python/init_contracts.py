@@ -158,6 +158,9 @@ class OracleWriter:
     # ─────────────────────────────────────────────────────────────
 
     def run(self, slot_seconds: int = 60):
+        print(self.p2p_market.functions.settleSlot()._encode_transaction_data())
+        self._send_tx(self.p2p_market.functions.settleSlot())
+        return
         """Hauptschleife: pushe einen Slot pro Minute."""
         self.register_households_if_needed()
         self.register_gridprovider_if_needed()

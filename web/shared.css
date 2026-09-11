@@ -1,0 +1,685 @@
+* {
+      box-sizing: border-box;
+  }
+
+  body {
+      font-family: -apple-system, Segoe UI, Roboto, sans-serif;
+      background: #0f1115;
+      color: #e6e6e6;
+      margin: 0;
+      padding: 24px;
+  }
+
+  h1 {
+      font-size: 20px;
+      margin: 0 0 4px;
+  }
+
+  h2 {
+      font-size: 15px;
+      margin: 0 0 10px;
+      color: #9fd3ff;
+  }
+
+  .sub {
+      color: #888;
+      font-size: 13px;
+      margin-bottom: 16px;
+  }
+
+  .header-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 18px;
+      border-bottom: 1px solid #22262f;
+      padding-bottom: 12px;
+  }
+
+  .topnav {
+      display: flex;
+      gap: 4px;
+      flex-wrap: wrap;
+  }
+
+  .icon-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 32px;
+      height: 32px;
+      flex-shrink: 0;
+      background: #171a21;
+      border: 1px solid #2a2e38;
+      color: #9fd3ff;
+      border-radius: 6px;
+      padding: 0;
+      cursor: pointer;
+      margin: 0;
+      transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  }
+
+  .icon-btn:hover {
+      background: #1c2028;
+      border-color: #3a4150;
+  }
+
+  .icon-btn.active {
+      background: #2b6cb0;
+      border-color: #2b6cb0;
+      color: #fff;
+  }
+
+  .icon-btn svg {
+      width: 16px;
+      height: 16px;
+  }
+
+  .topnav a {
+      color: #9fd3ff;
+      text-decoration: none;
+      font-size: 13px;
+      padding: 6px 12px;
+      border-radius: 6px;
+      background: #171a21;
+      border: 1px solid #2a2e38;
+  }
+
+  .topnav a.active {
+      background: #2b6cb0;
+      color: #fff;
+      border-color: #2b6cb0;
+  }
+
+  .topnav a:hover:not(.active) {
+      background: #1c2028;
+  }
+
+  .panel {
+      background: #171a21;
+      border: 1px solid #2a2e38;
+      border-radius: 8px;
+      padding: 16px 18px;
+      margin-bottom: 16px;
+  }
+
+  .config-grid {
+      display: grid;
+      grid-template-columns: 160px 1fr;
+      gap: 8px 12px;
+      align-items: center;
+  }
+
+  .config-grid label {
+      font-size: 12px;
+      color: #aaa;
+  }
+
+  input[type=text],
+  input[type=number],
+  select,
+  textarea {
+      width: 100%;
+      background: #0f1115;
+      border: 1px solid #333944;
+      color: #e6e6e6;
+      border-radius: 4px;
+      padding: 6px 8px;
+      font-family: ui-monospace, Consolas, monospace;
+      font-size: 12px;
+  }
+
+  textarea {
+      resize: vertical;
+      margin-bottom: 8px;
+      line-height: 1.5;
+  }
+
+  input[readonly] {
+      color: #999;
+      background: #14161b;
+  }
+
+  button {
+      background: #2b6cb0;
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      padding: 8px 16px;
+      font-size: 13px;
+      cursor: pointer;
+      margin-top: 10px;
+      margin-right: 8px;
+  }
+
+  button:hover {
+      background: #3a7fca;
+  }
+
+  button:disabled {
+      background: #333944;
+      cursor: not-allowed;
+      opacity: 0.45;
+  }
+
+  button.secondary {
+      background: #333944;
+  }
+
+  button.secondary:hover {
+      background: #444b58;
+  }
+
+  button.danger {
+      background: #7f1d1d;
+  }
+
+  button.danger:hover {
+      background: #9f2626;
+  }
+
+  button.small {
+      padding: 3px 8px;
+      font-size: 11px;
+      margin: 0;
+  }
+
+  button.copy {
+      background: #262b35;
+      padding: 2px 6px;
+      font-size: 11px;
+      margin: 0 0 0 6px;
+      border: 1px solid #333944;
+  }
+
+  button.copy:hover {
+      background: #333944;
+  }
+
+  button.copy.done {
+      background: #14351f;
+      color: #4ade80;
+      border-color: #1c4a2c;
+  }
+
+  table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+  }
+
+  th,
+  td {
+      text-align: left;
+      padding: 6px 8px;
+      border-bottom: 1px solid #22262f;
+      white-space: nowrap;
+  }
+
+  th {
+      color: #9fd3ff;
+      font-weight: 600;
+  }
+
+  .addr-cell {
+      display: flex;
+      align-items: center;
+  }
+
+  .kv {
+      display: grid;
+      grid-template-columns: 220px 1fr;
+      gap: 4px 12px;
+      font-size: 13px;
+  }
+
+  .kv div.k {
+      color: #9fd3ff;
+  }
+
+  .kv div.v {
+      font-family: ui-monospace, Consolas, monospace;
+      word-break: break-all;
+      display: flex;
+      align-items: center;
+  }
+
+  .ok {
+      color: #4ade80;
+  }
+
+  .bad {
+      color: #f87171;
+  }
+
+  .muted {
+      color: #666;
+  }
+
+  .warn {
+      color: #fbbf24;
+  }
+
+  .log {
+      font-family: ui-monospace, Consolas, monospace;
+      font-size: 12px;
+      white-space: pre-wrap;
+      margin-top: 10px;
+      line-height: 1.5;
+  }
+
+  .log .step-ok {
+      color: #4ade80;
+  }
+
+  .log .step-bad {
+      color: #f87171;
+  }
+
+  .log .step-info {
+      color: #9fd3ff;
+  }
+
+  .grid2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+  }
+
+  @media (max-width: 900px) {
+      .grid2 {
+          grid-template-columns: 1fr;
+      }
+  }
+
+  #walletBar {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+  }
+
+  .hint {
+      color: #888;
+      font-size: 12px;
+      margin-bottom: 8px;
+  }
+
+  .banner {
+      padding: 10px 14px;
+      border-radius: 6px;
+      font-size: 13px;
+      margin-bottom: 16px;
+  }
+
+  .banner.warn {
+      background: #2a2110;
+      border: 1px solid #4a3b14;
+      color: #fbbf24;
+  }
+
+  .pos {
+      color: #4ade80;
+  }
+
+  .neg {
+      color: #f87171;
+  }
+
+  .stat-row {
+      display: flex;
+      gap: 24px;
+      flex-wrap: wrap;
+      margin-bottom: 12px;
+  }
+
+  .stat .label {
+      font-size: 11px;
+      color: #888;
+      text-transform: none;
+  }
+
+  .stat .value {
+      font-size: 18px;
+      font-family: ui-monospace, Consolas, monospace;
+  }
+
+  .bar-wrap {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+  }
+
+  .bar-track {
+      flex: 1;
+      background: #0f1115;
+      border-radius: 3px;
+      height: 8px;
+      min-width: 60px;
+      overflow: hidden;
+  }
+
+  .bar-fill {
+      background: #2b6cb0;
+      height: 100%;
+  }
+
+  /* Account selection list (modernized replacement for a plain table) */
+  .acct-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+  }
+
+  .acct-row {
+      position: relative;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 12px 14px;
+      border-radius: 10px;
+      border: 1px solid #2a2e38;
+      background: #171a21;
+      cursor: pointer;
+      transition: border-color 0.15s ease, background 0.15s ease;
+  }
+
+  .acct-row:hover {
+      border-color: #3a4150;
+      background: #1c212a;
+  }
+
+  .acct-row.selected {
+      background: linear-gradient(135deg, #0d2815 0%, #153c20 100%),
+                  repeating-linear-gradient(45deg, transparent, transparent 4px, rgba(255,255,255,0.02) 4px, rgba(255,255,255,0.02) 8px);
+      border-color: #1e5e31;
+      box-shadow: inset 0 0 0 1px #1e5e31;
+  }
+
+  .acct-radio-input {
+      position: absolute;
+      opacity: 0;
+      width: 0;
+      height: 0;
+      pointer-events: none;
+  }
+
+  .acct-radio-visual {
+      flex-shrink: 0;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      border: 2px solid #444b58;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: border-color 0.15s ease;
+  }
+
+  .acct-row.selected .acct-radio-visual {
+      border-color: #4ade80;
+  }
+
+  .acct-radio-visual .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #4ade80;
+      opacity: 0;
+      transform: scale(0.4);
+      transition: opacity 0.15s ease, transform 0.15s ease;
+  }
+
+  .acct-row.selected .acct-radio-visual .dot {
+      opacity: 1;
+      transform: scale(1);
+  }
+
+  .acct-main {
+      flex: 1;
+      min-width: 0;
+  }
+
+  .acct-addr {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-family: ui-monospace, Consolas, monospace;
+      font-size: 13px;
+  }
+
+  .acct-tag {
+      font-size: 10px;
+      font-family: -apple-system, Segoe UI, Roboto, sans-serif;
+      background: #2b6cb0;
+      color: #fff;
+      padding: 1px 6px;
+      border-radius: 10px;
+  }
+
+  .acct-sub {
+      font-size: 12px;
+      color: #888;
+      margin-top: 3px;
+  }
+
+  .acct-allowance {
+      text-align: right;
+      flex-shrink: 0;
+  }
+
+  .acct-allowance-label {
+      font-size: 10px;
+      color: #666;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+  }
+
+  .acct-allowance-value {
+      font-family: ui-monospace, Consolas, monospace;
+      font-size: 13px;
+      margin-top: 3px;
+  }
+
+  /* Diverging settlement bar chart: bars grow up (green, received) or down
+     (red, paid) from a shared zero line, columns sorted received -> paid. */
+  .settlement-chart {
+      display: flex;
+      align-items: flex-end;
+      gap: 10px;
+      overflow-x: auto;
+      padding: 4px 4px 0;
+  }
+
+  .settle-col {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      flex: 1 1 0;
+      min-width: 58px;
+  }
+
+  .settle-value {
+      font-family: ui-monospace, Consolas, monospace;
+      font-size: 11px;
+      height: 15px;
+      line-height: 15px;
+      white-space: nowrap;
+  }
+
+  .settle-value.pos {
+      color: #4ade80;
+  }
+
+  .settle-value.neg {
+      color: #f87171;
+  }
+
+  .settle-top-half,
+  .settle-bottom-half {
+      width: 100%;
+      height: 90px;
+      display: flex;
+      align-items: center;
+  }
+
+  .settle-top-half {
+      flex-direction: column-reverse;
+  }
+
+  .settle-bottom-half {
+      flex-direction: column;
+  }
+
+  .settle-bar {
+      width: 55%;
+      min-width: 16px;
+  }
+
+  .settle-bar-pos {
+      background-color: #1c6b41;
+      background-image: repeating-linear-gradient(45deg, transparent, transparent 4px, rgba(255, 255, 255, 0.09) 4px, rgba(255, 255, 255, 0.09) 8px);
+      border-radius: 4px 4px 0 0;
+  }
+
+  .settle-bar-neg {
+      background-color: #7a2222;
+      background-image: repeating-linear-gradient(45deg, transparent, transparent 4px, rgba(255, 255, 255, 0.09) 4px, rgba(255, 255, 255, 0.09) 8px);
+      border-radius: 0 0 4px 4px;
+  }
+
+  .settle-zero-line {
+      width: 100%;
+      height: 2px;
+      background: #333944;
+      flex-shrink: 0;
+  }
+
+  .settle-addr {
+      margin-top: 6px;
+      font-family: ui-monospace, Consolas, monospace;
+      font-size: 11px;
+      color: #9fd3ff;
+      cursor: pointer;
+      white-space: nowrap;
+  }
+
+  .settle-addr:hover {
+      text-decoration: underline;
+  }
+
+  /* Battery state badges */
+  .batt-state {
+      font-size: 12px;
+      font-weight: 600;
+  }
+
+  .batt-state.charging {
+      color: #4ade80;
+  }
+
+  .batt-state.idle {
+      color: #9aa0ab;
+  }
+
+  .batt-state.discharging {
+      color: #f87171;
+  }
+
+  .batt-state.unknown {
+      color: #666;
+      font-weight: 400;
+  }
+
+  /* Price-factor / multiplier badge */
+  .pricefactor.good {
+      color: #4ade80;
+  }
+
+  .pricefactor.bad {
+      color: #f87171;
+  }
+
+  .pricefactor.neutral {
+      color: #888;
+  }
+
+  /* Per-account chart cards (consumption/production, battery history) */
+  .acct-charts {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+  }
+
+  .acct-chart-card {
+      background: #171a21;
+      border: 1px solid #2a2e38;
+      border-radius: 8px;
+      padding: 14px 16px;
+  }
+
+  .acct-chart-card h3 {
+      font-size: 13px;
+      margin: 0 0 2px;
+      color: #9fd3ff;
+      font-family: ui-monospace, Consolas, monospace;
+      font-weight: 600;
+  }
+
+  .acct-chart-card .chart-meta {
+      font-size: 11px;
+      color: #888;
+      margin-bottom: 10px;
+  }
+
+  .chart-scroll {
+      overflow-x: auto;
+      overflow-y: hidden;
+  }
+
+  /* Used where we deliberately don't want horizontal scrolling: instead of a
+     scrollbar, older points are trimmed and the chart is anchored to the
+     right so the most recent data stays visible. */
+  .chart-fixed {
+      overflow: hidden;
+      display: flex;
+      justify-content: flex-end;
+  }
+
+  /* Windowed chart (paged via nav buttons instead of scrolling) */
+  .chart-window {
+      overflow: hidden;
+  }
+
+  .chart-nav {
+      display: flex;
+      gap: 4px;
+      flex-shrink: 0;
+  }
+
+  .chart-nav-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
+  }
+
+  .chart-legend {
+      display: flex;
+      gap: 16px;
+      font-size: 11px;
+      color: #aaa;
+      margin-bottom: 12px;
+      flex-wrap: wrap;
+  }
+
+  .chart-legend .swatch {
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      border-radius: 2px;
+      margin-right: 5px;
+      vertical-align: middle;
+  }

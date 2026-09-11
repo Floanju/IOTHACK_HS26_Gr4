@@ -41,18 +41,13 @@
       "pv_peak_kwp": 0.0,
       "battery_capacity_kwh": 0.0,
       "battery_max_rate_kwh": 0.0,
-      "base_consumption_kwh_per_hour": 11.0
+      "base_consumption_kwh_per_hour": 3.0
     }
   ],
 
-  "grid_operator": {
-    "comment": "EKR ist kein Haushalt, sondern der Netzbetreiber (P2PEnergyMarket-Producer). Wird nicht simuliert (kein Meter/PV/Batterie), sondern nur mit eigenen Ankaufs-/Verkaufspreisen im P2P-Market registriert.",
+  "grid_provider": {
     "id": "ekr",
-    "address": "0xD35B3D1B1B514971e308cc4BE8e506CaF2a4F100",
-    "type": "grid_operator",
-    "comment_price": "Preise in Token-Einheiten pro kWh, 6 Decimals (gleiche Skalierung wie P2PEnergyMarket.energyPricePerKwh).",
-    "buy_price_per_kwh": 80000,
-    "sell_price_per_kwh": 120000
+    "address": "0xD35B3D1B1B514971e308cc4BE8e506CaF2a4F100"
   },
 
   "weather": {
@@ -65,10 +60,10 @@
   "blockchain": {
     "rpc_url": "https://ethereum-sepolia-rpc.publicnode.com",
     "chain_id": 11155111,
-    "oracle_storage_address": "0xa241DeF207135617A7676c2556FE88D6DDF47544",
-    "p2p_market_address": "0x06bB195Bcb03d065bb1120562cfEedf52d62D2CE",
-    "battery_manager_address": "0x3dc02ba0c07411890502bb132BAA28d0a05eE8B1",
-    "incentive_controller_address": "0xA496AD56263b26AA01BA4f91236537feB206362D",
+    "oracle_storage_address": "0xBB35D3977314Af488086944511956ab667a1bE1C",
+    "p2p_market_address": "0x452cf3c1aed6e3e0285F4720A8Fa0cb538F4eA3b",
+    "battery_manager_address": "0x6abcF3A781b6faE9E9D4Fb793e3b186ffcd8e1F6",
+    "incentive_controller_address": "0x803A957f15ffADb49b213e9BE635AD8391B20D17",
     "stablecoin_address": "0x4BaBBaE33998fEd65Ada53bc41CeAa3Cde7F7B46"
   }
 }

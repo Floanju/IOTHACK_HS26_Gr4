@@ -1,0 +1,79 @@
+<div id="shared-header-ui">
+  <div class="header-top">
+    <div class="topnav">
+      <a href="#" id="navHome">Home</a>
+      <a href="#" id="navAdmin">Admin</a>
+      <a href="#" id="navSelfservice">Self-Service</a>
+      <a href="#" id="navTransactions">Transactions</a>
+      <a href="#" id="navOverview">Overview</a>
+    </div>
+    <button type="button" id="settingsToggle" class="icon-btn" onclick="toggleSettings()"
+            title="Deployment settings" aria-label="Deployment settings" aria-expanded="false" aria-controls="deploymentPanel">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="3"></circle>
+        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+      </svg>
+    </button>
+  </div>
+
+  <div id="missingParamsBanner" class="banner warn" style="display:none;">
+    Missing <code>market</code> URL parameter. Enter the P2PEnergyMarket address below and click
+    "Load" — there's no built-in default, this page only works with an explicit deployment.
+    OracleStorage, the stablecoin, and any optional Battery/Incentive contracts are all derived
+    from it automatically.
+  </div>
+
+  <div class="panel settings-panel" id="deploymentPanel" style="display:none;">
+    <h2>Deployment</h2>
+    <div class="config-grid">
+      <label>P2PEnergyMarket</label>
+      <input type="text" id="cfgMarket" placeholder="0x...">
+
+      <label>OracleStorage</label>
+      <input type="text" id="cfgOracle" readonly placeholder="(auto, via market.oracle())">
+
+      <label>Stablecoin</label>
+      <input type="text" id="cfgStablecoin" readonly placeholder="(auto, via market.stablecoin())">
+
+      <label>BatteryManager</label>
+      <input type="text" id="cfgBattery" readonly placeholder="(auto, via market.batteryManager())">
+      
+      <!-- New Incentive Controller appended here -->
+      <label>IncentiveController</label>
+      <input type="text" id="cfgIncentive" readonly placeholder="(auto, via market.incentiveController())">
+    </div>
+    <button onclick="loadConfig()">Load</button>
+    <div id="cfgStatus" class="muted" style="margin-top:6px; font-size:12px;"></div>
+  </div>
+
+  <div class="panel settings-panel" id="householdLabelsPanel" style="display:none;">
+    <h2>Household labels</h2>
+    <div class="hint">
+      Optional: paste a household config JSON (either a bare array, or an object with a
+      "households" array) with an <code>address</code> and <code>id</code> per entry. Any address
+      that matches is shown as its id everywhere in this app instead of the raw wallet address —
+      the copy button next to an address always copies the real address regardless. Saved in this
+      browser only.
+    </div>
+    <textarea id="householdLabelsInput" rows="8" placeholder='{"households": [{"id": "house_01", "address": "0x...", ...}]}'></textarea>
+    <div>
+      <button onclick="saveHouseholdLabels()">Save</button>
+      <button class="secondary" onclick="clearHouseholdLabels()">Clear</button>
+    </div>
+    <div id="householdLabelsStatus" class="muted" style="margin-top:6px; font-size:12px;"></div>
+  </div>
+
+  <div class="panel" id="walletPanel">
+    <h2>Wallet</h2>
+    <div class="hint">
+      Connect as many accounts as you need in one go (MetaMask → connected sites → edit accounts)
+      so each write action below can find the right signer for the required role by itself.
+    </div>
+    <div id="walletBar">
+      <button onclick="connectWallet()">Connect MetaMask</button>
+      <span id="walletAddr" class="muted">Not connected</span>
+    </div>
+    <div id="rolesTableWrap" style="margin-top:10px; overflow-x:auto;"></div>
+    <div id="walletStatus" class="muted" style="margin-top:6px; font-size:12px;"></div>
+  </div>
+</div>

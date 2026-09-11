@@ -4,1761 +4,705 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Energy Trading — Overview</title>
+
+<link rel="stylesheet" href="../shared.css">
+
 <script src="https://cdn.jsdelivr.net/npm/web3@1.10.4/dist/web3.min.js"></script>
-<style>
-  * { box-sizing: border-box; }
-  body {
-    font-family: -apple-system, Segoe UI, Roboto, sans-serif;
-    background: #0f1115;
-    color: #e6e6e6;
-    margin: 0;
-    padding: 24px;
-  }
-  h1 { font-size: 20px; margin: 0 0 4px; }
-  h2 { font-size: 15px; margin: 0 0 10px; color: #9fd3ff; }
-  .sub { color: #888; font-size: 13px; margin-bottom: 16px; }
-  .topnav { display: flex; gap: 4px; margin-bottom: 18px; border-bottom: 1px solid #22262f; padding-bottom: 12px; }
-  .topnav a {
-    color: #9fd3ff; text-decoration: none; font-size: 13px;
-    padding: 6px 12px; border-radius: 6px; background: #171a21; border: 1px solid #2a2e38;
-  }
-  .topnav a.active { background: #2b6cb0; color: #fff; border-color: #2b6cb0; }
-  .topnav a:hover:not(.active) { background: #1c2028; }
-  .subnav { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 16px; }
-  .subnav a {
-    color: #9fd3ff; text-decoration: none; font-size: 12px;
-    padding: 5px 12px; border-radius: 999px; background: #171a21; border: 1px solid #2a2e38;
-  }
-  .subnav a:hover { border-color: #3a7fca; }
-  .panel {
-    background: #171a21;
-    border: 1px solid #2a2e38;
-    border-radius: 8px;
-    padding: 16px 18px;
-    margin-bottom: 16px;
-  }
-  section[id], details[id] { scroll-margin-top: 16px; }
-  details.panel > summary { font-size: 15px; color: #9fd3ff; cursor: pointer; list-style: none; }
-  details.panel > summary::-webkit-details-marker { display: none; }
-  details.panel > summary:before { content: "▸ "; color: #666; }
-  details.panel[open] > summary:before { content: "▾ "; }
-  details.panel[open] > summary { margin-bottom: 10px; }
-  .config-grid {
-    display: grid;
-    grid-template-columns: 160px 1fr;
-    gap: 8px 12px;
-    align-items: center;
-  }
-  .config-grid label { font-size: 12px; color: #aaa; }
-  input[type=text], input[type=datetime-local], textarea {
-    width: 100%;
-    background: #0f1115;
-    border: 1px solid #333944;
-    color: #e6e6e6;
-    border-radius: 4px;
-    padding: 6px 8px;
-    font-family: ui-monospace, Consolas, monospace;
-    font-size: 12px;
-    color-scheme: dark;
-  }
-  textarea { min-height: 80px; resize: vertical; }
-  input[readonly] { color: #999; background: #14161b; }
-  button {
-    background: #2b6cb0;
-    color: #fff;
-    border: none;
-    border-radius: 4px;
-    padding: 8px 16px;
-    font-size: 13px;
-    cursor: pointer;
-    margin-top: 10px;
-    margin-right: 8px;
-  }
-  button:hover { background: #3a7fca; }
-  button:disabled { background: #333944; cursor: not-allowed; }
-  button.secondary { background: #333944; }
-  button.secondary:hover { background: #444b58; }
-  button.copy { background: #262b35; padding: 2px 6px; font-size: 11px; margin: 0 0 0 6px; border: 1px solid #333944; }
-  button.copy:hover { background: #333944; }
-  button.copy.done { background: #14351f; color: #4ade80; border-color: #1c4a2c; }
-  table { width: 100%; border-collapse: collapse; font-size: 13px; }
-  th, td {
-    text-align: left;
-    padding: 6px 8px;
-    border-bottom: 1px solid #22262f;
-    white-space: nowrap;
-  }
-  th { color: #9fd3ff; font-weight: 600; }
-  .addr-cell { display: flex; align-items: center; }
-  .kv { display: grid; grid-template-columns: 220px 1fr; gap: 4px 12px; font-size: 13px; }
-  .kv div.k { color: #9fd3ff; }
-  .kv div.v { font-family: ui-monospace, Consolas, monospace; word-break: break-all; display: flex; align-items: center; }
-  .ok { color: #4ade80; }
-  .bad { color: #f87171; }
-  .muted { color: #666; }
-  .warn { color: #fbbf24; }
-  .hint { color: #888; font-size: 12px; margin-bottom: 8px; }
-  .banner { padding: 10px 14px; border-radius: 6px; font-size: 13px; margin-bottom: 16px; }
-  .banner.warn { background: #2a2110; border: 1px solid #4a3b14; color: #fbbf24; }
-
-  .date-range {
-    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
-    background: #0f1115;
-    border: 1px solid #2a2e38;
-    border-radius: 8px;
-    padding: 10px 16px;
-    margin-bottom: 12px;
-  }
-  .date-range label { display: flex; align-items: center; gap: 8px; font-size: 12px; color: #aaa; }
-  .date-range input[type=datetime-local] { width: auto; }
-  .date-range button { margin: 0; }
-
-  .stat-row { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
-  .stat-tile { flex: 1 1 130px; background: #0f1115; border: 1px solid #2a2e38; border-radius: 6px; padding: 10px 12px; }
-  .stat-tile .label { font-size: 11px; color: #888; }
-  .stat-tile .value { font-size: 20px; font-weight: 600; margin-top: 2px; }
-
-  .badge {
-    display: inline-block;
-    padding: 1px 8px;
-    border-radius: 999px;
-    font-size: 11px;
-    font-weight: 600;
-    letter-spacing: 0.02em;
-  }
-  .badge.charge { background: rgba(74, 222, 128, 0.15); color: #4ade80; }
-  .badge.discharge { background: rgba(251, 191, 36, 0.15); color: #fbbf24; }
-  .badge.idle { background: rgba(154, 160, 171, 0.15); color: #9aa0ab; }
-
-  .chart-card { margin-bottom: 12px; }
-  .chart-card summary { font-size: 13px; color: #e6e6e6; cursor: pointer; list-style: none; }
-  .chart-card summary::-webkit-details-marker { display: none; }
-  .chart-card summary:before { content: "▾ "; color: #666; }
-  .chart-legend { display: flex; gap: 16px; font-size: 12px; color: #aaa; margin-top: 6px; flex-wrap: wrap; }
-  .chart-legend span.dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 4px; vertical-align: middle; }
-
-  .chart-tooltip {
-    position: fixed;
-    pointer-events: none;
-    z-index: 1000;
-    background: #1c2028;
-    border: 1px solid #333944;
-    border-radius: 6px;
-    padding: 6px 10px;
-    font-size: 12px;
-    color: #e6e6e6;
-    box-shadow: 0 4px 14px rgba(0,0,0,0.45);
-    display: none;
-    white-space: nowrap;
-  }
-  .chart-tooltip .tt-time { color: #888; margin-bottom: 3px; }
-  .chart-tooltip .tt-row { display: flex; align-items: center; gap: 6px; }
-  .chart-tooltip .tt-row .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto; }
-
-  html { scroll-behavior: smooth; }
-  .market-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-  @media (max-width: 900px) { .market-grid { grid-template-columns: 1fr; } }
-</style>
+<script src="../shared.js"></script>
 </head>
 <body>
 
-<div class="topnav">
-  <a href="#" id="navHome">Home</a>
-  <a href="#" id="navAdmin">Admin</a>
-  <a href="#" id="navSelfservice">Self-Service</a>
-  <a href="#" id="navTransactions">Transactions</a>
-  <a href="#" id="navOverview" class="active">Overview</a>
-</div>
+<div id="header-placeholder"></div>
+<script>
+  fetch("../header.html")
+    .then(r => r.text())
+    .then(html => {
+        $("header-placeholder").outerHTML = html;
+        // This page is read-only (no wallet-signed actions), so the shared
+        // Wallet panel doesn't apply here.
+        const walletPanel = $("walletPanel");
+        if (walletPanel) walletPanel.style.display = "none";
+        initGlobal();
+    })
+    .catch(e => console.error("Failed to load header.html:", e));
+</script>
 
 <h1>Energy Trading — Overview</h1>
 <div class="sub">
-  Read-only view across OracleStorage, P2PEnergyMarket, BatteryManager and IncentiveController —
-  no wallet needed. <span id="statusInline" class="muted"></span>
+  Current prices, per-account status, and consumption/production &amp; battery history sourced
+  from the oracle's event log.
 </div>
 
-<div id="missingParamsBanner" class="banner warn" style="display:none;">
-  Missing <code>oracle</code> and/or <code>market</code> URL parameter. Enter both below and
-  click "Load" — there are no built-in defaults, this page only works with an explicit deployment.
+<div class="panel settings-panel" id="lookbackPanel" style="display:none;">
+  <h2>Lookback window</h2>
+  <div class="hint">
+    The consumption/production and battery history charts below are read via eth_getLogs over the
+    last N blocks (no indexer/API key needed). Some public RPC providers cap the block range per
+    request — lower this if a reload errors out.
+  </div>
+  <label style="font-size:12px; color:#aaa;">Blocks to scan</label>
+  <input type="number" id="lookbackBlocks" value="1000" style="max-width:160px; display:inline-block;">
+  <button onclick="refreshAll()">Reload</button>
+  <div id="lookbackStatus" class="muted" style="margin-top:6px; font-size:12px;"></div>
 </div>
 
 <div class="panel">
-  <h2>Deployment</h2>
-  <div class="config-grid">
-    <label>OracleStorage</label>
-    <input type="text" id="cfgOracle" placeholder="0x...">
-
-    <label>P2PEnergyMarket</label>
-    <input type="text" id="cfgMarket" placeholder="0x...">
-
-    <label>Stablecoin</label>
-    <input type="text" id="cfgStablecoin" readonly placeholder="(auto, via market.stablecoin())">
-  </div>
-  <button onclick="loadConfig()">Load</button>
-  <button class="secondary" onclick="refresh()">Refresh</button>
-  <div id="cfgStatus" class="muted" style="margin-top:6px; font-size:12px;"></div>
+  <h2>Current prices</h2>
+  <div class="kv" id="pricesKv"></div>
 </div>
 
-<nav class="subnav">
-  <a href="#sec-households">Households</a>
-  <a href="#sec-meter">Consumption &amp; production</a>
-  <a href="#sec-weather">Weather</a>
-  <a href="#sec-battery">Battery</a>
-  <a href="#sec-incentive">Incentive</a>
-  <a href="#sec-market">Market &amp; Oracle</a>
-  <a href="#sec-advanced">Advanced</a>
-</nav>
-
-<section id="sec-households" class="panel">
-  <h2>Households <span class="muted" style="font-weight:400; font-size:12px;">— known list ∪ market.getAllHouseholds()</span></h2>
-
-  <div class="date-range">
-    <label>From <input type="datetime-local" id="meterFrom"></label>
-    <label>To <input type="datetime-local" id="meterTo"></label>
-    <button onclick="applySelectedRange()">Apply</button>
-    <button class="secondary" onclick="setMeterRangePreset(24)">Last 24h</button>
-    <button class="secondary" onclick="setMeterRangePreset(24 * 7)">Last 7 days</button>
-  </div>
-
-  <div class="stat-row" id="householdStats"></div>
-  <table id="householdsTable">
-    <thead>
-      <tr>
-        <th>ID</th><th>Address</th>
-        <th>Oracle reg.</th><th>Market reg.</th>
-        <th>Consumption (Wh)</th><th>Production (Wh)</th><th>Meter time</th>
-        <th>SoC %</th><th>Capacity (Wh)</th>
-      </tr>
-    </thead>
-    <tbody></tbody>
-  </table>
-  <div id="householdsStatus" class="muted" style="margin-top:8px"></div>
-</section>
-
-<section id="sec-meter" class="panel">
-  <h2>Consumption &amp; production <span class="muted" style="font-weight:400; font-size:12px;">— per household, from OracleStorage.MeterUpdated events; range set above</span></h2>
-  <div id="meterHistoryStatus" class="muted" style="margin-bottom:8px"></div>
-  <div id="meterCharts"></div>
-</section>
-
-<section id="sec-weather" class="panel">
-  <h2>Weather <span class="muted" style="font-weight:400; font-size:12px;">— irradiance &amp; temperature, from OracleStorage.WeatherUpdated events; range set above</span></h2>
-
-  <div class="stat-row" id="weatherStats"></div>
-  <div id="weatherHistoryStatus" class="muted" style="margin-bottom:8px"></div>
-
-  <h2 style="font-size:13px; margin-top:4px;">Irradiance (W/m²)</h2>
-  <svg id="weatherIrradianceChart" style="width:100%; height:200px; display:block;"></svg>
-
-  <h2 style="font-size:13px; margin-top:16px;">Temperature (°C)</h2>
-  <svg id="weatherTemperatureChart" style="width:100%; height:200px; display:block;"></svg>
-</section>
-
-<section id="sec-battery" class="panel">
-  <h2>BatteryManager <span class="muted" style="font-weight:400; font-size:12px;">— phase 2, battery charge cycles</span></h2>
-  <div class="kv" id="batteryKv"></div>
-  <div id="batteryStatus" class="muted" style="margin-top:8px"></div>
-
-  <table id="batteryTable" style="margin-top:12px;">
-    <thead>
-      <tr>
-        <th>ID</th><th>Address</th><th>Managed?</th>
-        <th>Last action</th><th>Amount (Wh)</th><th>Slot</th><th>Time</th><th>SoC % (current)</th>
-      </tr>
-    </thead>
-    <tbody></tbody>
-  </table>
-
-  <h2 style="margin-top:20px">History <span class="muted" style="font-weight:400; font-size:12px;">— SoC over time (BatteryUpdated events) and DecisionMade events (charge/discharge cycles)</span></h2>
-  <button onclick="loadBatteryEvents()">Load / refresh events</button>
-  <div id="batteryEventsStatus" class="muted" style="margin-top:8px"></div>
-
-  <div id="batterySocCharts"></div>
-
-  <details id="batteryEventsDetails" class="panel chart-card" style="margin-top:14px;">
-    <summary>Decision log — charge/discharge messages</summary>
-    <table id="batteryEventsTable">
-      <thead>
-        <tr>
-          <th>Time</th><th>Household</th><th>Action</th><th>Amount (Wh)</th><th>Slot</th><th>Reason</th>
-        </tr>
-      </thead>
-      <tbody></tbody>
-    </table>
-  </details>
-</section>
-
-<section id="sec-incentive" class="panel">
-  <h2>IncentiveController <span class="muted" style="font-weight:400; font-size:12px;">— phase 3, reputation &amp; price discount</span></h2>
-  <div class="kv" id="incentiveKv"></div>
-  <div id="incentiveStatus" class="muted" style="margin-top:8px"></div>
-
-  <table id="incentiveTable" style="margin-top:12px;">
-    <thead>
-      <tr>
-        <th>ID</th><th>Address</th><th>Reputation score</th><th>Price factor</th>
-      </tr>
-    </thead>
-    <tbody></tbody>
-  </table>
-
-  <h2 style="margin-top:20px">History <span class="muted" style="font-weight:400; font-size:12px;">— ScoreUpdated events</span></h2>
-  <button onclick="loadIncentiveEvents()">Load / refresh events</button>
-  <div id="incentiveEventsStatus" class="muted" style="margin-top:8px"></div>
-
-  <table id="incentiveEventsTable" style="margin-top:14px;">
-    <thead>
-      <tr>
-        <th>Time</th><th>Household</th><th>New score</th><th>Consumption dev. (‰)</th><th>Production dev. (‰)</th>
-      </tr>
-    </thead>
-    <tbody></tbody>
-  </table>
-
-  <h2 style="margin-top:20px">Forecast vs. Actual <span class="muted" style="font-weight:400; font-size:12px;">— last slots, per household</span></h2>
-  <button onclick="loadForecastVsActual()">Load / refresh</button>
-  <div id="forecastActualStatus" class="muted" style="margin-top:8px"></div>
-
-  <table id="forecastActualTable" style="margin-top:14px;">
-    <thead>
-      <tr>
-        <th>Slot</th><th>Household</th>
-        <th>Forecast cons. (Wh)</th><th>Actual cons. (Wh)</th>
-        <th>Forecast prod. (Wh)</th><th>Actual prod. (Wh)</th>
-      </tr>
-    </thead>
-    <tbody></tbody>
-  </table>
-</section>
-
-<details id="sec-market" class="panel" open>
-  <summary>Market &amp; Oracle <span class="muted" style="font-weight:400; font-size:12px;">— technical contract details</span></summary>
-  <div class="market-grid">
-    <div>
-      <h2>OracleStorage</h2>
-      <div class="kv" id="oracleKv"></div>
-      <h2 style="margin-top:16px">Weather (latest slot)</h2>
-      <div class="kv" id="weatherKv"></div>
+<div class="panel">
+  <h2>Time <span class="muted" style="font-weight:400; font-size:12px;">— drives the table and every chart below, together</span></h2>
+  <div class="chart-nav-bar" style="margin-bottom:0;">
+    <div class="chart-nav">
+      <button class="small secondary" id="navBack" onclick="navTime('back')" title="Back one settlement">◀</button>
+      <button class="small secondary" id="navNow" onclick="navTime('now')">Now</button>
+      <button class="small secondary" id="navFwd" onclick="navTime('fwd')" title="Forward one settlement">▶</button>
     </div>
-    <div>
-      <h2>P2PEnergyMarket</h2>
-      <div class="kv" id="marketKv"></div>
-      <button onclick="testSettleSlot()">Simulate settleSlot() (call, no tx)</button>
-      <div id="settleResult" class="muted" style="margin-top:8px"></div>
-    </div>
+    <span class="muted" id="navRangeLabel" style="font-size:11px;"></span>
   </div>
-</details>
+</div>
 
-<details id="sec-advanced" class="panel">
-  <summary>Advanced <span class="muted" style="font-weight:400; font-size:12px;">— overrides &amp; known households</span></summary>
-  <div class="hint">
-    BatteryManager and IncentiveController are normally read straight off the market contract
-    (<code>batteryManager()</code> / <code>incentiveController()</code>). Overrides here are only
-    useful if you want to inspect one before it's linked via <code>setBatteryManager()</code> /
-    <code>setIncentiveController()</code>. OracleStorage has no enumeration function, so a
-    household that only reports meter data but isn't market-registered yet can only be found
-    through the list below — it's automatically unioned with <code>market.getAllHouseholds()</code>.
+<div class="panel">
+  <h2>Accounts</h2>
+  <table id="accountsTable">
+    <thead>
+      <tr>
+        <th>Address</th><th>Type</th><th>Consumption</th><th>Production</th>
+        <th>Settlement change</th><th>Battery</th><th>Price factor</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+  <div id="accountsStatus" class="muted" style="margin-top:8px; font-size:12px;"></div>
+</div>
+
+<div class="panel">
+  <h2>Consumption vs. production <span class="muted" style="font-weight:400; font-size:12px;">— per account</span></h2>
+  <div class="chart-legend">
+    <span><span class="swatch" style="background:#8a5a12;"></span>Consumption (covered by own production)</span>
+    <span><span class="swatch" style="background:#1c6b41;"></span>Surplus produced</span>
+    <span><span class="swatch" style="background:#7a2222;"></span>Consumption exceeding production</span>
   </div>
-  <div class="config-grid">
-    <label>BatteryManager override</label>
-    <input type="text" id="cfgBatteryOverride" placeholder="blank = auto, via market.batteryManager()">
+  <div class="acct-charts" id="cpCharts"></div>
+  <div id="cpStatus" class="muted" style="margin-top:8px; font-size:12px;"></div>
+</div>
 
-    <label>IncentiveController override</label>
-    <input type="text" id="cfgIncentiveOverride" placeholder="blank = auto, via market.incentiveController()">
-
-    <label>Known households (JSON)</label>
-    <textarea id="cfgHouseholds" spellcheck="false"></textarea>
+<div class="panel">
+  <h2>Battery history <span class="muted" style="font-weight:400; font-size:12px;">— per account, same time window as above</span></h2>
+  <div class="chart-legend">
+    <span><span class="swatch" style="background:#1c6b41;"></span>Charging</span>
+    <span><span class="swatch" style="background:#3a3f4a;"></span>Idle</span>
+    <span><span class="swatch" style="background:#7a2222;"></span>Discharging</span>
   </div>
-  <button onclick="loadConfig()">Save &amp; refresh</button>
-</details>
+  <div class="acct-charts" id="battCharts"></div>
+  <div id="battStatus" class="muted" style="margin-top:8px; font-size:12px;"></div>
+</div>
 
 <script>
-const RPC_URL = "https://ethereum-sepolia-rpc.publicnode.com";
-const ZERO = "0x0000000000000000000000000000000000000000";
-
-const ORACLE_ABI = [
-  {"inputs":[{"internalType":"address","name":"household","type":"address"}],"name":"getLatestMeterReading","outputs":[{"components":[{"internalType":"uint256","name":"consumptionWh","type":"uint256"},{"internalType":"uint256","name":"productionWh","type":"uint256"},{"internalType":"uint256","name":"timestamp","type":"uint256"}],"internalType":"struct IOracleStorage.MeterReading","name":"","type":"tuple"}],"stateMutability":"view","type":"function"},
-  {"inputs":[{"internalType":"address","name":"household","type":"address"}],"name":"getLatestBatteryState","outputs":[{"components":[{"internalType":"uint256","name":"socPercent","type":"uint256"},{"internalType":"uint256","name":"capacityWh","type":"uint256"},{"internalType":"uint256","name":"maxRateWh","type":"uint256"},{"internalType":"uint256","name":"timestamp","type":"uint256"}],"internalType":"struct IOracleStorage.BatteryState","name":"","type":"tuple"}],"stateMutability":"view","type":"function"},
-  {"inputs":[],"name":"getLatestWeather","outputs":[{"components":[{"internalType":"uint256","name":"irradianceWm2","type":"uint256"},{"internalType":"int256","name":"temperatureC","type":"int256"},{"internalType":"uint256","name":"cloudCover","type":"uint256"},{"internalType":"uint256","name":"timestamp","type":"uint256"}],"internalType":"struct IOracleStorage.WeatherData","name":"","type":"tuple"}],"stateMutability":"view","type":"function"},
-  {"inputs":[],"name":"getCurrentSlot","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
-  {"inputs":[{"internalType":"address","name":"household","type":"address"}],"name":"isHouseholdRegistered","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"view","type":"function"},
-  {"inputs":[],"name":"owner","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},
-  {"inputs":[],"name":"startTimestamp","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
-  {"inputs":[],"name":"SLOT_DURATION","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
-  {"inputs":[{"internalType":"address","name":"","type":"address"}],"name":"authorizedOracles","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"view","type":"function"},
-  {"anonymous":false,"inputs":[
-    {"indexed":true,"internalType":"address","name":"household","type":"address"},
-    {"indexed":false,"internalType":"uint256","name":"slot","type":"uint256"},
-    {"indexed":false,"internalType":"uint256","name":"consumption","type":"uint256"},
-    {"indexed":false,"internalType":"uint256","name":"production","type":"uint256"}
-  ],"name":"MeterUpdated","type":"event"},
-  {"anonymous":false,"inputs":[
-    {"indexed":true,"internalType":"address","name":"household","type":"address"},
-    {"indexed":false,"internalType":"uint256","name":"slot","type":"uint256"},
-    {"indexed":false,"internalType":"uint256","name":"soc","type":"uint256"}
-  ],"name":"BatteryUpdated","type":"event"},
-  {"anonymous":false,"inputs":[
-    {"indexed":false,"internalType":"uint256","name":"slot","type":"uint256"},
-    {"indexed":false,"internalType":"uint256","name":"irradiance","type":"uint256"},
-    {"indexed":false,"internalType":"int256","name":"temperature","type":"int256"}
-  ],"name":"WeatherUpdated","type":"event"}
-];
-
-const MARKET_ABI = [
-  {"inputs":[],"name":"owner","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},
-  {"inputs":[],"name":"stablecoin","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},
-  {"inputs":[],"name":"oracle","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},
-  {"inputs":[],"name":"energyPricePerKwh","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
-  {"inputs":[],"name":"lastSettledSlot","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
-  {"inputs":[],"name":"batteryManager","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},
-  {"inputs":[],"name":"incentiveController","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},
-  {"inputs":[],"name":"getHouseholdCount","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
-  {"inputs":[],"name":"getAllHouseholds","outputs":[{"internalType":"address[]","name":"","type":"address[]"}],"stateMutability":"view","type":"function"},
-  {"inputs":[{"internalType":"address","name":"","type":"address"}],"name":"isRegistered","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"view","type":"function"},
-  {"inputs":[],"name":"settleSlot","outputs":[],"stateMutability":"nonpayable","type":"function"}
-];
-
-// Phase 2: BatteryManager. Decision struct order must exactly match BatteryManager.sol:
-// (action, amountWh, slot, timestamp).
-const BATTERY_ABI = [
-  {"inputs":[],"name":"owner","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},
-  {"inputs":[],"name":"oracle","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},
-  {"inputs":[{"internalType":"address","name":"","type":"address"}],"name":"isManaged","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"view","type":"function"},
-  {"inputs":[],"name":"getManagedHouseholds","outputs":[{"internalType":"address[]","name":"","type":"address[]"}],"stateMutability":"view","type":"function"},
-  {"inputs":[{"internalType":"address","name":"household","type":"address"}],"name":"getLastDecision","outputs":[{"components":[{"internalType":"enum IBatteryManager.Action","name":"action","type":"uint8"},{"internalType":"uint256","name":"amountWh","type":"uint256"},{"internalType":"uint256","name":"slot","type":"uint256"},{"internalType":"uint256","name":"timestamp","type":"uint256"}],"internalType":"struct BatteryManager.Decision","name":"","type":"tuple"}],"stateMutability":"view","type":"function"},
-  {"anonymous":false,"inputs":[
-    {"indexed":true,"internalType":"address","name":"household","type":"address"},
-    {"indexed":false,"internalType":"enum IBatteryManager.Action","name":"action","type":"uint8"},
-    {"indexed":false,"internalType":"uint256","name":"amountWh","type":"uint256"},
-    {"indexed":false,"internalType":"uint256","name":"slot","type":"uint256"},
-    {"indexed":false,"internalType":"string","name":"reason","type":"string"}
-  ],"name":"DecisionMade","type":"event"}
-];
-
-// Phase 3: IncentiveController (see IncentiveController.sol / IIncentiveController.sol —
-// not part of the uploaded contract set, ABI kept as previously used).
-const INCENTIVE_ABI = [
-  {"inputs":[],"name":"owner","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},
-  {"inputs":[{"internalType":"address","name":"household","type":"address"}],"name":"getReputationScore","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
-  {"inputs":[{"internalType":"address","name":"household","type":"address"}],"name":"getPriceMultiplier","outputs":[{"internalType":"uint256","name":"multiplier","type":"uint256"}],"stateMutability":"view","type":"function"},
-  {"inputs":[{"internalType":"address","name":"household","type":"address"},{"internalType":"uint256","name":"slot","type":"uint256"}],"name":"getForecast","outputs":[{"components":[{"internalType":"uint256","name":"expectedConsumptionWh","type":"uint256"},{"internalType":"uint256","name":"expectedProductionWh","type":"uint256"},{"internalType":"uint256","name":"slot","type":"uint256"},{"internalType":"uint256","name":"timestamp","type":"uint256"}],"internalType":"struct IncentiveController.Forecast","name":"","type":"tuple"}],"stateMutability":"view","type":"function"},
-  {"inputs":[{"internalType":"address","name":"household","type":"address"},{"internalType":"uint256","name":"slot","type":"uint256"}],"name":"getActual","outputs":[{"components":[{"internalType":"uint256","name":"actualConsumptionWh","type":"uint256"},{"internalType":"uint256","name":"actualProductionWh","type":"uint256"},{"internalType":"uint256","name":"slot","type":"uint256"}],"internalType":"struct IncentiveController.Actual","name":"","type":"tuple"}],"stateMutability":"view","type":"function"},
-  {"anonymous":false,"inputs":[
-    {"indexed":true,"internalType":"address","name":"household","type":"address"},
-    {"indexed":false,"internalType":"uint256","name":"newScore","type":"uint256"},
-    {"indexed":false,"internalType":"uint256","name":"consumptionDeviation","type":"uint256"},
-    {"indexed":false,"internalType":"uint256","name":"productionDeviation","type":"uint256"}
-  ],"name":"ScoreUpdated","type":"event"}
-];
-
-const ACTION_NAMES = ["IDLE", "CHARGE", "DISCHARGE"];
-const ACTION_CLASS = ["idle", "charge", "discharge"];
-// Background shading behind the SoC chart, keyed by action index (1=CHARGE, 2=DISCHARGE).
-// IDLE (0) has no entry, so it's left unshaded.
-const ACTION_BAND_COLOR = { 1: "rgba(74, 222, 128, 0.16)", 2: "rgba(248, 113, 113, 0.16)" };
-
-const $ = id => document.getElementById(id);
-const short = a => a ? a.slice(0,6) + "…" + a.slice(-4) : "-";
-const fmtTs = ts => Number(ts) === 0 ? "-" : new Date(Number(ts) * 1000).toLocaleString();
-const wei6 = v => (Number(v) / 1e6).toFixed(6);
+// initGlobal() is called once the shared header has been fetched and
+// injected — see the header-placeholder script above.
+window.addEventListener('marketConfigLoaded', refreshAll);
 
 const SVG_NS = "http://www.w3.org/2000/svg";
+const CP_CHART_HEIGHT = 110;
+const CP_BAR_SLOT = 26;
+const CP_BAR_WIDTH = 16;
+const BATT_CHART_HEIGHT = 110;
+const BATT_POINT_SLOT = 26;
+let battChartUid = 0;
+let cpChartUid = 0;
+
+// Single global time cursor shared by the table and every chart on this
+// page. { allSlots, capacity, offset, entries, oracleR, incentiveR,
+//   managedSet, households, meterByHousehold, batteryByHousehold,
+//   settlementsBySlot, decimals, symbol }
+let timeState = null;
+
+function groupByHouseholdSorted(events) {
+  const map = groupByHousehold(events);
+  for (const k of Object.keys(map)) {
+    map[k].sort((a, b) => Number(a.returnValues.slot) - Number(b.returnValues.slot));
+  }
+  return map;
+}
+
+// Index of the latest entry in an ascending-by-slot array whose slot <= focusSlot, or -1.
+function latestIndexAtOrBefore(sortedEvents, focusSlot) {
+  let idx = -1;
+  for (let i = 0; i < sortedEvents.length; i++) {
+    if (Number(sortedEvents[i].returnValues.slot) <= focusSlot) idx = i; else break;
+  }
+  return idx;
+}
+
+// Groups EnergyTraded events by their settlement slot, each pre-reduced to a
+// net-amount-per-address map, so we can look up "the settlement as of any
+// point in time" without re-scanning every event on every nav click.
+function buildSettlementsBySlot(energyEvents) {
+  const bySlot = {};
+  for (const e of energyEvents) {
+    const slotNum = Number(e.returnValues.slot);
+    const { producer, consumer, amountPaid } = e.returnValues;
+    const net = (bySlot[slotNum] = bySlot[slotNum] || {});
+    net[producer] = (net[producer] || 0n) + BigInt(amountPaid);
+    net[consumer] = (net[consumer] || 0n) - BigInt(amountPaid);
+  }
+  return { bySlot, slots: Object.keys(bySlot).map(Number).sort((a, b) => a - b) };
+}
+
+// The most recent settlement at or before focusSlot (i.e. "as of then").
+function settlementNetAsOf(settlementsBySlot, focusSlot) {
+  if (focusSlot === null) return { slot: null, net: {} };
+  const { bySlot, slots } = settlementsBySlot;
+  let chosen = null;
+  for (let i = slots.length - 1; i >= 0; i--) {
+    if (slots[i] <= focusSlot) { chosen = slots[i]; break; }
+  }
+  return { slot: chosen, net: chosen !== null ? bySlot[chosen] : {} };
+}
+
+function fmtToken(raw, decimals) {
+  const sign = raw < 0n ? "-" : "";
+  const abs = raw < 0n ? -raw : raw;
+  return sign + (Number(abs) / 10 ** Number(decimals)).toString();
+}
+
+function fmtSigned(raw, decimals, symbol) {
+  if (raw === 0n) return `<span class="muted">0 ${symbol}</span>`;
+  const cls = raw > 0n ? "pos" : "neg";
+  const sign = raw > 0n ? "+" : "";
+  return `<span class="${cls}">${sign}${fmtToken(raw, decimals)} ${symbol}</span>`;
+}
+
+function addrCell(addr) {
+  return `<div class="addr-cell"><span title="${addr}">${short(addr)}</span><button class="copy" onclick="copyAddress('${addr}', this)">Copy</button></div>`;
+}
+
+function groupByHousehold(events) {
+  const map = {};
+  for (const e of events) {
+    const k = e.returnValues.household.toLowerCase();
+    (map[k] = map[k] || []).push(e);
+  }
+  return map;
+}
+
 function svgEl(tag, attrs) {
   const el = document.createElementNS(SVG_NS, tag);
-  for (const k in attrs) el.setAttribute(k, attrs[k]);
+  for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
   return el;
 }
 
 // ─────────────────────────────────────────────────────────────
-//  Shared hover tooltip for all line charts (meter, weather, battery SoC)
+//  Main data load
 // ─────────────────────────────────────────────────────────────
 
-const chartTooltip = document.createElement("div");
-chartTooltip.className = "chart-tooltip";
-document.body.appendChild(chartTooltip);
+async function refreshAll() {
+  if (!cfg.market || !cfg.stablecoin || !cfg.oracle) return;
 
-function positionChartTooltip(clientX, clientY) {
-  const pad = 14;
-  chartTooltip.style.left = "0px";
-  chartTooltip.style.top = "0px";
-  const ttRect = chartTooltip.getBoundingClientRect();
-  let left = clientX + pad;
-  let top = clientY + pad;
-  if (left + ttRect.width > window.innerWidth - 8) left = clientX - ttRect.width - pad;
-  if (top + ttRect.height > window.innerHeight - 8) top = clientY - ttRect.height - pad;
-  chartTooltip.style.left = Math.max(4, left) + "px";
-  chartTooltip.style.top = Math.max(4, top) + "px";
-}
+  const lookback = Math.max(1, parseInt($("lookbackBlocks").value, 10) || 1000);
+  $("lookbackStatus").textContent = "Loading…";
+  $("accountsStatus").textContent = "Loading…";
+  $("cpStatus").textContent = "Loading…";
+  $("battStatus").textContent = "Loading…";
 
-// Attaches a crosshair + shared tooltip to a chart: hovering anywhere over the
-// plot area snaps to the nearest data point (by x/time) and shows its value(s),
-// rather than relying on the native, sluggish SVG <title> tooltip.
-function attachHoverTooltip(svg, xScale, yScale, box, events, keySpecs) {
-  if (!events || events.length === 0) return;
-
-  const overlay = svgEl("rect", {
-    x: box.left, y: box.top,
-    width: Math.max(0, box.right - box.left),
-    height: Math.max(0, box.bottom - box.top),
-    fill: "transparent"
-  });
-  overlay.style.cursor = "crosshair";
-  svg.appendChild(overlay);
-
-  const crosshair = svgEl("line", {
-    x1: 0, x2: 0, y1: box.top, y2: box.bottom,
-    stroke: "#444b58", "stroke-width": 1, "stroke-dasharray": "3,3", visibility: "hidden"
-  });
-  svg.appendChild(crosshair);
-
-  const dots = keySpecs.map(spec => {
-    const dot = svgEl("circle", { r: 4, fill: spec.color, stroke: "#0f1115", "stroke-width": 1.5, visibility: "hidden" });
-    svg.appendChild(dot);
-    return dot;
-  });
-
-  function findNearest(mouseX) {
-    let nearest = events[0], bestDist = Infinity;
-    for (const e of events) {
-      const d = Math.abs(xScale(e.timestamp) - mouseX);
-      if (d < bestDist) { bestDist = d; nearest = e; }
-    }
-    return nearest;
-  }
-
-  function onMove(ev) {
-    const rect = svg.getBoundingClientRect();
-    const mouseX = ev.clientX - rect.left;
-    const e = findNearest(mouseX);
-    const ex = xScale(e.timestamp);
-
-    crosshair.setAttribute("x1", ex);
-    crosshair.setAttribute("x2", ex);
-    crosshair.setAttribute("visibility", "visible");
-
-    let html = `<div class="tt-time">${fmtTs(e.timestamp)}</div>`;
-    keySpecs.forEach((spec, i) => {
-      const raw = e[spec.key];
-      dots[i].setAttribute("cx", ex);
-      dots[i].setAttribute("cy", yScale(raw));
-      dots[i].setAttribute("visibility", "visible");
-      const shown = spec.decimals != null ? Number(raw).toFixed(spec.decimals) : raw;
-      html += `<div class="tt-row"><span class="dot" style="background:${spec.color}"></span>${spec.label}: <b>${shown}${spec.unit || ""}</b></div>`;
-    });
-
-    chartTooltip.innerHTML = html;
-    chartTooltip.style.display = "block";
-    positionChartTooltip(ev.clientX, ev.clientY);
-  }
-
-  function onLeave() {
-    crosshair.setAttribute("visibility", "hidden");
-    dots.forEach(d => d.setAttribute("visibility", "hidden"));
-    chartTooltip.style.display = "none";
-  }
-
-  overlay.addEventListener("mousemove", onMove);
-  overlay.addEventListener("mouseleave", onLeave);
-}
-
-function copyAddress(addr, btn) {
-  navigator.clipboard.writeText(addr).then(() => {
-    const original = btn.textContent;
-    btn.textContent = "✓";
-    btn.classList.add("done");
-    setTimeout(() => { btn.textContent = original; btn.classList.remove("done"); }, 1200);
-  }).catch(() => { alert(addr); });
-}
-
-function addrCell(addr, id) {
-  const label = id ? id : short(addr);
-  return `<div class="addr-cell"><span title="${addr}">${label}</span><button class="copy" onclick="copyAddress('${addr}', this)">Copy</button></div>`;
-}
-
-function kvRow(container, key, value, cls) {
-  const k = document.createElement("div"); k.className = "k"; k.textContent = key;
-  const v = document.createElement("div"); v.className = "v" + (cls ? " " + cls : ""); v.textContent = value;
-  container.appendChild(k); container.appendChild(v);
-}
-
-function kvAddrRow(container, key, addr, cls) {
-  const k = document.createElement("div"); k.className = "k"; k.textContent = key;
-  const v = document.createElement("div"); v.className = "v" + (cls ? " " + cls : "");
-  const span = document.createElement("span"); span.textContent = addr;
-  const btn = document.createElement("button");
-  btn.className = "copy"; btn.textContent = "Copy";
-  btn.onclick = () => copyAddress(addr, btn);
-  v.appendChild(span); v.appendChild(btn);
-  container.appendChild(k); container.appendChild(v);
-}
-
-// ─────────────────────────────────────────────────────────────
-//  URL params — oracle/market are required, no hardcoded defaults.
-//  battery/incentive overrides and the known-households list are optional
-//  and, if present, are also round-tripped through the URL so the page
-//  stays fully reproducible from a link, same as elsewhere on this site.
-// ─────────────────────────────────────────────────────────────
-
-let cfg = { oracle: "", market: "", stablecoin: "", batteryOverride: "", incentiveOverride: "", households: [] };
-let effectiveBattery = "", effectiveIncentive = "";
-let readWeb3;
-
-// Shared connection/household state so buttons like loadBatteryEvents() don't
-// need to reparse config / reconnect every time.
-let oracleContract = null;
-let marketContract = null;
-let currentHouseholds = [];
-let batteryContract = null;
-let currentBatteryHouseholds = [];
-// Addresses (lowercased) of households that actually report a battery
-// (oracle battery state with capacityWh > 0) — the SoC chart is only shown
-// for these, even if other households also emit BatteryUpdated events.
-let batteryCapableHouseholds = new Set();
-let incentiveContract = null;
-let currentStartTimestamp = 0;
-let currentSlotDuration = 60;
-
-function readParamFromUrl(name) {
-  try {
-    const v = new URLSearchParams(window.location.search).get(name);
-    return v ? v.trim() : null;
-  } catch (e) { return null; }
-}
-
-function syncParamsToUrl(params) {
-  try {
-    const url = new URL(window.location.href);
-    for (const [key, value] of Object.entries(params)) {
-      if (value) url.searchParams.set(key, value);
-      else url.searchParams.delete(key);
-    }
-    history.replaceState(null, "", url.toString());
-  } catch (e) {
-    console.warn("syncParamsToUrl failed:", e.message);
-  }
-}
-
-function setupNav() {
-  const qs = window.location.search;
-  $("navHome").href = "../index.html" + qs;
-  $("navAdmin").href = "../admin/index.html" + qs;
-  $("navSelfservice").href = "../selfservice/index.html" + qs;
-  $("navTransactions").href = "../transactions/index.html" + qs;
-}
-
-function applyConfigToForm() {
-  $("cfgOracle").value = cfg.oracle || "";
-  $("cfgMarket").value = cfg.market || "";
-  $("cfgStablecoin").value = cfg.stablecoin || "";
-  $("cfgBatteryOverride").value = cfg.batteryOverride || "";
-  $("cfgIncentiveOverride").value = cfg.incentiveOverride || "";
-  $("cfgHouseholds").value = JSON.stringify(cfg.households || [], null, 2);
-}
-
-function readAdvancedFromForm() {
-  cfg.batteryOverride = $("cfgBatteryOverride").value.trim();
-  cfg.incentiveOverride = $("cfgIncentiveOverride").value.trim();
-  cfg.households = JSON.parse($("cfgHouseholds").value || "[]");
-}
-
-async function loadConfig() {
-  const oracleRaw = $("cfgOracle").value.trim();
-  const marketRaw = $("cfgMarket").value.trim();
-  let oracle, market;
-  try { oracle = Web3.utils.toChecksumAddress(oracleRaw); }
-  catch (e) { $("cfgStatus").innerHTML = `<span class="bad">Invalid OracleStorage address.</span>`; return; }
-  try { market = Web3.utils.toChecksumAddress(marketRaw); }
-  catch (e) { $("cfgStatus").innerHTML = `<span class="bad">Invalid P2PEnergyMarket address.</span>`; return; }
-
-  cfg.oracle = oracle;
-  cfg.market = market;
-  try {
-    readAdvancedFromForm();
-  } catch (e) {
-    $("cfgStatus").innerHTML = `<span class="bad">Invalid JSON in "Known households": ${e.message}</span>`;
-    return;
-  }
-
-  syncParamsToUrl({
-    oracle: cfg.oracle,
-    market: cfg.market,
-    battery: cfg.batteryOverride,
-    incentive: cfg.incentiveOverride,
-    households: cfg.households.length ? JSON.stringify(cfg.households) : ""
-  });
-  $("missingParamsBanner").style.display = "none";
-  $("cfgStatus").textContent = "Loading…";
-
-  await refresh();
-}
-
-async function fetchDerivedAddresses() {
   const marketR = new readWeb3.eth.Contract(MARKET_ABI, cfg.market);
-  try {
-    cfg.stablecoin = await marketR.methods.stablecoin().call();
-  } catch (e) {
-    cfg.stablecoin = "";
-    $("cfgStatus").innerHTML = `<span class="bad">Could not read stablecoin() from market: ${e.message}</span>`;
-    throw e;
-  }
-  applyConfigToForm();
-}
-
-// ─────────────────────────────────────────────────────────────
-//  Main refresh
-// ─────────────────────────────────────────────────────────────
-
-async function refresh() {
-  if (!cfg.oracle || !cfg.market) return;
-  $("cfgStatus").textContent = "Loading…";
-  $("statusInline").textContent = "";
-  $("householdsStatus").textContent = "";
-  $("batteryStatus").textContent = "";
-
-  const web3 = new Web3(new Web3.providers.HttpProvider(RPC_URL));
-  readWeb3 = web3;
-  const oracle = new web3.eth.Contract(ORACLE_ABI, cfg.oracle);
-  const market = new web3.eth.Contract(MARKET_ABI, cfg.market);
-  oracleContract = oracle;
-  marketContract = market;
+  const stablecoinR = new readWeb3.eth.Contract(ERC20_ABI, cfg.stablecoin);
+  const oracleR = new readWeb3.eth.Contract(ORACLE_ABI, cfg.oracle);
+  const incentiveR = cfg.incentive ? new readWeb3.eth.Contract(INCENTIVE_ABI, cfg.incentive) : null;
+  const batteryR = (cfg.battery && cfg.battery !== ZERO) ? new readWeb3.eth.Contract(BATTERY_ABI, cfg.battery) : null;
 
   try {
-    await fetchDerivedAddresses();
+    if (window._decimals === undefined) {
+      window._decimals = Number(await stablecoinR.methods.decimals().call());
+      window._symbol = await stablecoinR.methods.symbol().call();
+    }
+    const decimals = window._decimals;
+    const symbol = window._symbol;
 
-    const [
-      oOwner, currentSlot, startTs, slotDuration, weather,
-      mOwner, mStablecoin, mOracle, price, lastSettled,
-      battMgr, incCtrl, hhCount, allHouseholds
-    ] = await Promise.all([
-      oracle.methods.owner().call(),
-      oracle.methods.getCurrentSlot().call(),
-      oracle.methods.startTimestamp().call(),
-      oracle.methods.SLOT_DURATION().call(),
-      oracle.methods.getLatestWeather().call(),
-      market.methods.owner().call(),
-      market.methods.stablecoin().call(),
-      market.methods.oracle().call(),
-      market.methods.energyPricePerKwh().call(),
-      market.methods.lastSettledSlot().call(),
-      market.methods.batteryManager().call(),
-      market.methods.incentiveController().call(),
-      market.methods.getHouseholdCount().call(),
-      market.methods.getAllHouseholds().call()
+    await renderPrices(marketR, decimals, symbol);
+
+    const latestBlock = Number(await readWeb3.eth.getBlockNumber());
+    const fromBlock = Math.max(0, latestBlock - lookback);
+    $("lookbackStatus").innerHTML = `<span class="ok">Scanning blocks ${fromBlock} → ${latestBlock} (${latestBlock - fromBlock} blocks).</span>`;
+
+    const [households, producers, managedHouseholds] = await Promise.all([
+      marketR.methods.getAllHouseholds().call(),
+      marketR.methods.getAllProducers().call().catch(() => []),
+      batteryR ? batteryR.methods.getManagedHouseholds().call().catch(() => []) : Promise.resolve([])
+    ]);
+    const managedSet = new Set(managedHouseholds.map(a => a.toLowerCase()));
+
+    const [energyEvents, meterEvents, batteryEvents] = await Promise.all([
+      marketR.getPastEvents("EnergyTraded", { fromBlock, toBlock: "latest" }),
+      oracleR.getPastEvents("MeterUpdated", { fromBlock, toBlock: "latest" }),
+      oracleR.getPastEvents("BatteryUpdated", { fromBlock, toBlock: "latest" })
     ]);
 
-    currentStartTimestamp = Number(startTs);
-    currentSlotDuration = Number(slotDuration);
+    const meterByHousehold = groupByHouseholdSorted(meterEvents);
+    const batteryByHousehold = groupByHouseholdSorted(batteryEvents);
+    const settlementsBySlot = buildSettlementsBySlot(energyEvents);
 
-    const oracleKv = $("oracleKv"); oracleKv.innerHTML = "";
-    kvAddrRow(oracleKv, "Address", cfg.oracle);
-    kvAddrRow(oracleKv, "Owner", oOwner);
-    kvRow(oracleKv, "Current slot", currentSlot);
-    kvRow(oracleKv, "Start", fmtTs(startTs));
-    kvRow(oracleKv, "Slot duration", slotDuration + "s");
+    const entries = [
+      ...households.map(a => ({ addr: a, type: "Household" })),
+      // The registered producer(s) are the grid owner — no meter/battery of
+      // its own, see renderAccountsTableRows().
+      ...producers.map(a => ({ addr: a, type: "Grid owner", isGrid: true }))
+    ];
 
-    const weatherKv = $("weatherKv"); weatherKv.innerHTML = "";
-    kvRow(weatherKv, "Irradiance", weather.irradianceWm2 + " W/m²");
-    kvRow(weatherKv, "Temperature", (Number(weather.temperatureC) / 10).toFixed(1) + " °C");
-    kvRow(weatherKv, "Cloud cover", weather.cloudCover + " %");
-    kvRow(weatherKv, "Time", fmtTs(weather.timestamp));
-    renderWeatherStats(weather);
+    // The shared time axis is the union of every slot seen in either event
+    // log — the same axis the table and both charts below page through together.
+    const slotSet = new Set();
+    for (const k of Object.keys(meterByHousehold)) meterByHousehold[k].forEach(e => slotSet.add(Number(e.returnValues.slot)));
+    for (const k of Object.keys(batteryByHousehold)) batteryByHousehold[k].forEach(e => slotSet.add(Number(e.returnValues.slot)));
+    const allSlots = [...slotSet].sort((a, b) => a - b);
 
-    const marketKv = $("marketKv"); marketKv.innerHTML = "";
-    kvAddrRow(marketKv, "Address", cfg.market);
-    kvAddrRow(marketKv, "Owner", mOwner);
-    kvAddrRow(marketKv, "Stablecoin", mStablecoin, "ok");
-    kvAddrRow(marketKv, "Oracle", mOracle, mOracle.toLowerCase() === cfg.oracle.toLowerCase() ? "ok" : "bad");
-    kvRow(marketKv, "Price / kWh", wei6(price) + " token (" + price + " units)");
-    kvRow(marketKv, "Last settled slot", lastSettled);
+    const availableWidth = Math.max(($("cpCharts").clientWidth || 600) - 32, 120);
+    const capacity = Math.max(2, Math.floor(availableWidth / CP_BAR_SLOT));
+    const offset = allSlots.length > 0 ? Math.max(0, allSlots.length - capacity) : 0;
 
-    // A manual BatteryManager/IncentiveController override (Advanced section)
-    // wins over the on-chain value from the market — useful while it hasn't
-    // been linked via setBatteryManager()/setIncentiveController() yet.
-    effectiveBattery = cfg.batteryOverride || battMgr;
-    const battLabel = cfg.batteryOverride ? "BatteryManager (override)" : "BatteryManager";
-    if (effectiveBattery === ZERO || !effectiveBattery) {
-      kvRow(marketKv, battLabel, "— not set (phase 2)", "muted");
-    } else {
-      kvAddrRow(marketKv, battLabel, effectiveBattery, "ok");
-    }
+    timeState = {
+      allSlots, capacity, offset, entries, households, oracleR, incentiveR, managedSet,
+      meterByHousehold, batteryByHousehold, settlementsBySlot, decimals, symbol
+    };
 
-    effectiveIncentive = cfg.incentiveOverride || incCtrl;
-    const incLabel = cfg.incentiveOverride ? "IncentiveController (override)" : "IncentiveController";
-    if (effectiveIncentive === ZERO || !effectiveIncentive) {
-      kvRow(marketKv, incLabel, "— not set (phase 3)", "muted");
-    } else {
-      kvAddrRow(marketKv, incLabel, effectiveIncentive, "ok");
-    }
-    kvRow(marketKv, "Registered households", hhCount);
-
-    $("cfgStatus").innerHTML = `<span class="ok">Loaded.</span>`;
-    $("statusInline").innerHTML = `Updated ${new Date().toLocaleTimeString()}`;
-
-    // OracleStorage has no enumeration function, so union market.getAllHouseholds()
-    // with the manually maintained known-households list (also catches households
-    // that report meter data but aren't market-registered yet).
-    await loadHouseholds(oracle, market, cfg.households, allHouseholds);
-    await loadMeterHistory();
-    await loadWeatherHistory();
-    await loadBatteryManager(web3, oracle, effectiveBattery, cfg.households, allHouseholds);
-    await loadIncentiveController(web3, effectiveIncentive, currentHouseholds);
+    buildChartSkeletons();
+    await renderTimeWindow();
 
   } catch (e) {
     console.error(e);
-    $("cfgStatus").innerHTML = `<span class="bad">Error loading: ${e.message}</span>`;
-  }
-}
-
-function mergeHouseholds(known, onChain) {
-  const byAddress = new Map();
-  (known || []).forEach(h => {
-    if (h && h.address) byAddress.set(h.address.toLowerCase(), { id: h.id || short(h.address), address: h.address });
-  });
-  (onChain || []).forEach(addr => {
-    const key = addr.toLowerCase();
-    if (!byAddress.has(key)) byAddress.set(key, { id: short(addr), address: addr });
-  });
-  return Array.from(byAddress.values());
-}
-
-const addressIdMap = households => new Map(households.map(h => [h.address.toLowerCase(), h.id]));
-
-// Shows the average per reading, not the sum: 1 slot = 15 simulated minutes but
-// only ~1 real minute, so summing over "last 24h" of real time would add up
-// ~15 simulated days of energy. The average stays independent of how many
-// readings fall in the selected range.
-function renderHouseholdStats(activeHouseholds, avgConsumption, avgProduction) {
-  const statsEl = $("householdStats");
-  if (activeHouseholds === 0) { statsEl.innerHTML = ""; return; }
-
-  const net = avgProduction - avgConsumption;
-  const tile = (label, value, cls) => `<div class="stat-tile"><div class="label">${label}</div><div class="value ${cls || ""}">${value}</div></div>`;
-  statsEl.innerHTML =
-    tile("Active households", activeHouseholds) +
-    tile("Avg. consumption / reading", `${avgConsumption} Wh`) +
-    tile("Avg. production / reading", `${avgProduction} Wh`) +
-    tile("Avg. net / reading", `${net >= 0 ? "+" : ""}${net} Wh`, net >= 0 ? "ok" : "bad");
-}
-
-async function loadHouseholds(oracle, market, knownHouseholds, onChainAddresses) {
-  const tbody = document.querySelector("#householdsTable tbody");
-  tbody.innerHTML = "";
-
-  const households = mergeHouseholds(knownHouseholds, onChainAddresses);
-  currentHouseholds = households;
-
-  if (households.length === 0) {
-    $("householdStats").innerHTML = "";
-    $("householdsStatus").innerHTML = `<span class="muted">No households known — neither in the list nor registered in the market.</span>`;
-    return;
-  }
-
-  $("householdsStatus").textContent = `Loading ${households.length} household(s)…`;
-
-  try {
-    const rows = await Promise.all(households.map(async (h) => {
-      const [oracleReg, marketReg, meter, batt] = await Promise.all([
-        oracle.methods.isHouseholdRegistered(h.address).call(),
-        market.methods.isRegistered(h.address).call(),
-        oracle.methods.getLatestMeterReading(h.address).call(),
-        oracle.methods.getLatestBatteryState(h.address).call()
-      ]);
-      return { ...h, oracleReg, marketReg, meter, batt };
-    }));
-
-    for (const r of rows) {
-      const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td>${r.id}</td>
-        <td>${addrCell(r.address)}</td>
-        <td class="${r.oracleReg ? "ok" : "bad"}">${r.oracleReg ? "✓" : "✗"}</td>
-        <td class="${r.marketReg ? "ok" : "bad"}">${r.marketReg ? "✓" : "✗"}</td>
-        <td>${r.meter.consumptionWh}</td>
-        <td>${r.meter.productionWh}</td>
-        <td>${fmtTs(r.meter.timestamp)}</td>
-        <td>${r.batt.capacityWh > 0 ? r.batt.socPercent + "%" : "-"}</td>
-        <td>${r.batt.capacityWh > 0 ? r.batt.capacityWh : "-"}</td>
-      `;
-      tbody.appendChild(tr);
-    }
-
-    $("householdsStatus").innerHTML = `<span class="ok">${rows.length} household(s) loaded (${rows.filter(r=>r.marketReg).length} registered in the market).</span>`;
-  } catch (e) {
-    console.error(e);
-    $("householdsStatus").innerHTML = `<span class="bad">Error loading household data: ${e.message}</span>`;
+    $("lookbackStatus").innerHTML = `<span class="bad">Error: ${e.message} — some RPC providers cap the block range per eth_getLogs request; try a smaller lookback.</span>`;
+    $("accountsStatus").textContent = "";
+    $("cpStatus").textContent = "";
+    $("battStatus").textContent = "";
   }
 }
 
 // ─────────────────────────────────────────────────────────────
-//  Shared From/To range — drives overview stats + all range charts
+//  Current prices
 // ─────────────────────────────────────────────────────────────
 
-function toDatetimeLocal(date) {
-  const pad = n => String(n).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
-}
-
-// Only set if still empty, so a user-picked range survives "Save & refresh".
-function initMeterRangeDefaults() {
-  if ($("meterFrom").value && $("meterTo").value) return;
-  const now = new Date();
-  const from = new Date(now.getTime() - 24 * 3600 * 1000);
-  $("meterTo").value = toDatetimeLocal(now);
-  $("meterFrom").value = toDatetimeLocal(from);
-}
-
-function setMeterRangePreset(hours) {
-  const now = new Date();
-  const from = new Date(now.getTime() - hours * 3600 * 1000);
-  $("meterTo").value = toDatetimeLocal(now);
-  $("meterFrom").value = toDatetimeLocal(from);
-  applySelectedRange();
-}
-
-function applySelectedRange() {
-  loadMeterHistory();
-  loadWeatherHistory();
-}
-
-function getMeterRange() {
-  const now = Math.floor(Date.now() / 1000);
-  const fromVal = $("meterFrom").value;
-  const toVal = $("meterTo").value;
-  let fromTs = fromVal ? Math.floor(new Date(fromVal).getTime() / 1000) : now - 24 * 3600;
-  let toTs = toVal ? Math.floor(new Date(toVal).getTime() / 1000) : now;
-  if (fromTs > toTs) [fromTs, toTs] = [toTs, fromTs];
-  return { fromTs, toTs };
-}
-
-// Falls back to a smaller block range since some RPC providers cap the range per query.
-async function fetchRecentEvents(contract, eventName) {
-  const latest = Number(await readWeb3.eth.getBlockNumber());
-  let fromBlock = Math.max(0, latest - 50000);
-  try {
-    return { events: await contract.getPastEvents(eventName, { fromBlock, toBlock: "latest" }), fromBlock };
-  } catch (err) {
-    console.warn(`getPastEvents(${eventName}) failed with a large range, retrying smaller:`, err.message);
-    fromBlock = Math.max(0, latest - 5000);
-    return { events: await contract.getPastEvents(eventName, { fromBlock, toBlock: "latest" }), fromBlock };
-  }
-}
-
-async function resolveEventTimestamps(events) {
-  const blockNumbers = [...new Set(events.map(e => e.blockNumber))];
-  const blocks = await Promise.all(blockNumbers.map(bn => readWeb3.eth.getBlock(bn)));
-  return new Map(blocks.map(b => [b.number, Number(b.timestamp)]));
-}
-
-function actionBadge(actionNum) {
-  const idx = Number(actionNum);
-  const name = ACTION_NAMES[idx] ?? ("#" + idx);
-  const cls = ACTION_CLASS[idx] ?? "idle";
-  return `<span class="badge ${cls}">${name}</span>`;
-}
-
-// Shared pipeline for loadMeterHistory() and loadWeatherHistory(), which only
-// differ in mapFn (field mapping).
-//
-// Timestamp is computed from the slot (startTimestamp + slot*SLOT_DURATION),
-// NOT from the tx's block timestamp: oracle_writer.py can send several
-// sequential tx per slot, and on a ~12s block time that can comfortably
-// exceed the target 60s slot duration, making a block-timestamp timeline
-// irregular. The slot-derived timestamp is deterministic and exactly paced.
-async function fetchRangedEvents(eventName, mapFn) {
-  const { fromTs, toTs } = getMeterRange();
-  const { events, fromBlock } = await fetchRecentEvents(oracleContract, eventName);
-  const enriched = events
-    .map(e => mapFn(e, currentStartTimestamp + Number(e.returnValues.slot) * currentSlotDuration))
-    .filter(e => e.timestamp >= fromTs && e.timestamp <= toTs)
-    .sort((a, b) => a.timestamp - b.timestamp);
-  return { enriched, fromTs, toTs, fromBlock };
-}
-
-async function loadMeterHistory() {
-  const statusEl = $("meterHistoryStatus");
-  const container = $("meterCharts");
-
-  if (!oracleContract || !readWeb3) {
-    statusEl.innerHTML = `<span class="muted">Refresh above first to connect to the chain.</span>`;
-    return;
-  }
-
-  statusEl.textContent = "Loading MeterUpdated events…";
-
-  try {
-    const { enriched, fromTs, toTs, fromBlock } = await fetchRangedEvents("MeterUpdated", (e, timestamp) => ({
-      timestamp,
-      household: e.returnValues.household,
-      slot: e.returnValues.slot,
-      consumptionWh: Number(e.returnValues.consumption),
-      productionWh: Number(e.returnValues.production)
-    }));
-
-    container.innerHTML = "";
-
-    if (enriched.length === 0) {
-      renderHouseholdStats(0, 0, 0);
-      statusEl.innerHTML = `<span class="muted">No MeterUpdated events found in the selected range (queried from block ${fromBlock}). The range may be outside what the RPC can query — try a smaller/more recent range.</span>`;
-      return;
-    }
-
-    const byHousehold = new Map();
-    for (const e of enriched) {
-      const key = e.household.toLowerCase();
-      if (!byHousehold.has(key)) byHousehold.set(key, []);
-      byHousehold.get(key).push(e);
-    }
-
-    const ids = addressIdMap(currentHouseholds);
-    for (const [addr, evs] of byHousehold.entries()) {
-      const { card, svg } = buildMeterCard(ids.get(addr) || short(addr));
-      container.appendChild(card);
-      drawMeterChart(svg, evs);
-    }
-
-    const avgConsumption = Math.round(enriched.reduce((s, e) => s + e.consumptionWh, 0) / enriched.length);
-    const avgProduction = Math.round(enriched.reduce((s, e) => s + e.productionWh, 0) / enriched.length);
-    renderHouseholdStats(byHousehold.size, avgConsumption, avgProduction);
-
-    statusEl.innerHTML = `<span class="ok">${enriched.length} event(s) across ${byHousehold.size} household(s) loaded (${new Date(fromTs * 1000).toLocaleString()} – ${new Date(toTs * 1000).toLocaleString()}, from block ${fromBlock}).</span>`;
-
-  } catch (e) {
-    console.error(e);
-    container.innerHTML = "";
-    statusEl.innerHTML = `<span class="bad">Error loading meter events: ${e.message}</span>`;
-  }
-}
-
-function buildMeterCard(id) {
-  const card = document.createElement("details");
-  card.className = "panel chart-card";
-  card.open = true;
-
-  const summary = document.createElement("summary");
-  summary.textContent = `${id} — consumption & production`;
-  card.appendChild(summary);
-
-  const svg = svgEl("svg", { style: "width:100%; height:200px; display:block;" });
-  card.appendChild(svg);
-
-  const legend = document.createElement("div");
-  legend.className = "chart-legend";
-  legend.innerHTML = `
-    <span><span class="dot" style="background:#f87171"></span>Consumption (Wh)</span>
-    <span><span class="dot" style="background:#4ade80"></span>Production (Wh)</span>
+async function renderPrices(marketR, decimals, symbol) {
+  const [base, sell, buy] = await Promise.all([
+    marketR.methods.energyPricePerKwh().call(),
+    marketR.methods.householdToProducerPrice().call(),
+    marketR.methods.producerToHouseholdPrice().call()
+  ]);
+  $("pricesKv").innerHTML = `
+    <div class="k">Household ↔ Household <span class="muted" style="font-size:11px;">(P2P, before any incentive discount)</span></div>
+    <div class="v">${fmtToken(BigInt(base), decimals)} ${symbol} / kWh</div>
+    <div class="k">Household → Grid <span class="muted" style="font-size:11px;">(sell / feed-in)</span></div>
+    <div class="v">${fmtToken(BigInt(sell), decimals)} ${symbol} / kWh</div>
+    <div class="k">Grid → Household <span class="muted" style="font-size:11px;">(buy / import)</span></div>
+    <div class="v">${fmtToken(BigInt(buy), decimals)} ${symbol} / kWh</div>
   `;
-  card.appendChild(legend);
-
-  return { card, svg };
 }
 
-// Cloud cover has no history: WeatherUpdated doesn't emit it (only
-// slot/irradiance/temperature), so it's shown as a current stat only, not a chart.
-function renderWeatherStats(weather) {
-  const el = $("weatherStats");
-  const tile = (label, value) => `<div class="stat-tile"><div class="label">${label}</div><div class="value">${value}</div></div>`;
-  el.innerHTML =
-    tile("Cloud cover (current)", `${weather.cloudCover}%`) +
-    tile("Irradiance (current)", `${weather.irradianceWm2} W/m²`) +
-    tile("Temperature (current)", `${(Number(weather.temperatureC) / 10).toFixed(1)} °C`);
+// ─────────────────────────────────────────────────────────────
+//  Accounts table
+// ─────────────────────────────────────────────────────────────
+
+function batteryCellHtml(socPercent, capacityWh, state) {
+  if (socPercent === null || capacityWh === null) return '<span class="muted">—</span>';
+  const stateHtml = state
+    ? `<div class="batt-state ${state.cls}">${state.label}</div>`
+    : `<div class="batt-state unknown">Unknown</div>`;
+  return `
+    <div style="min-width:120px;">
+      ${stateHtml}
+      <div class="bar-wrap" style="margin-top:4px;">
+        <div class="bar-track"><div class="bar-fill" style="width:${socPercent}%;"></div></div>
+      </div>
+      <div class="muted" style="font-size:11px; margin-top:2px;">${socPercent}% of ${fmtToken(capacityWh, 3)} kWh</div>
+    </div>`;
 }
 
-async function loadWeatherHistory() {
-  const statusEl = $("weatherHistoryStatus");
-  const irradianceSvg = $("weatherIrradianceChart");
-  const temperatureSvg = $("weatherTemperatureChart");
+function priceFactorHtml(multiplier) {
+  if (multiplier === null) return '<span class="muted">?</span>';
+  const m = Number(multiplier);
+  const pct = (m - 1000) / 10;
+  const cls = m < 1000 ? "good" : (m > 1000 ? "bad" : "neutral");
+  const sign = m > 1000 ? "+" : "";
+  return `<span class="pricefactor ${cls}">×${(m / 1000).toFixed(2)} (${sign}${pct.toFixed(1)}%)</span>`;
+}
 
-  if (!oracleContract || !readWeb3) {
-    statusEl.innerHTML = `<span class="muted">Refresh above first to connect to the chain.</span>`;
+async function renderAccountsTableRows(focusSlot) {
+  if (!timeState) return;
+  const { entries, oracleR, incentiveR, managedSet, meterByHousehold, batteryByHousehold, settlementsBySlot, decimals, symbol } = timeState;
+  const tbody = document.querySelector("#accountsTable tbody");
+
+  if (entries.length === 0) {
+    tbody.innerHTML = "";
+    $("accountsStatus").innerHTML = `<span class="muted">No households or producers registered.</span>`;
     return;
   }
 
-  statusEl.textContent = "Loading WeatherUpdated events…";
-
-  try {
-    const { enriched, fromTs, toTs, fromBlock } = await fetchRangedEvents("WeatherUpdated", (e, timestamp) => ({
-      timestamp,
-      slot: e.returnValues.slot,
-      irradiance: Number(e.returnValues.irradiance),
-      temperatureC: Number(e.returnValues.temperature) / 10
-    }));
-
-    if (enriched.length === 0) {
-      clearChart(irradianceSvg, "No data in the selected range.");
-      clearChart(temperatureSvg, "No data in the selected range.");
-      statusEl.innerHTML = `<span class="muted">No WeatherUpdated events found in the selected range (queried from block ${fromBlock}).</span>`;
-      return;
-    }
-
-    drawWeatherChart(irradianceSvg, enriched, "irradiance", "#fbbf24", " W/m²", true, "Irradiance");
-    drawWeatherChart(temperatureSvg, enriched, "temperatureC", "#60a5fa", " °C", false, "Temperature", 1);
-
-    statusEl.innerHTML = `<span class="ok">${enriched.length} event(s) loaded (${new Date(fromTs * 1000).toLocaleString()} – ${new Date(toTs * 1000).toLocaleString()}, from block ${fromBlock}).</span>`;
-
-  } catch (e) {
-    console.error(e);
-    statusEl.innerHTML = `<span class="bad">Error loading weather events: ${e.message}</span>`;
-  }
-}
-
-// Catmull-Rom -> cubic Bezier so peaks between readings are rounded rather than
-// sharp. yBounds [yMin, yMax] (pixel-Y, optional) clamps control points to the
-// valid axis range: since a cubic Bezier always stays within the convex hull of
-// its control points, and the actual data points (P0/P1) already lie in range,
-// the curve between them is guaranteed to stay in range too — it never visibly
-// overshoots below 0 (or above the max), just eases smoothly against the edge.
-function smoothPathD(points, yBounds) {
-  if (points.length === 0) return "";
-  if (points.length === 1) return `M${points[0].x},${points[0].y}`;
-  if (points.length === 2) return `M${points[0].x},${points[0].y} L${points[1].x},${points[1].y}`;
-
-  const clampY = y => yBounds ? Math.min(yBounds[1], Math.max(yBounds[0], y)) : y;
-
-  let d = `M${points[0].x},${points[0].y} `;
-  for (let i = 0; i < points.length - 1; i++) {
-    const p0 = points[i - 1] || points[i];
-    const p1 = points[i];
-    const p2 = points[i + 1];
-    const p3 = points[i + 2] || p2;
-    const cp1x = p1.x + (p2.x - p0.x) / 6;
-    const cp1y = clampY(p1.y + (p2.y - p0.y) / 6);
-    const cp2x = p2.x - (p3.x - p1.x) / 6;
-    const cp2y = clampY(p2.y - (p3.y - p1.y) / 6);
-    d += `C${cp1x.toFixed(1)},${cp1y.toFixed(1)} ${cp2x.toFixed(1)},${cp2y.toFixed(1)} ${p2.x.toFixed(1)},${p2.y.toFixed(1)} `;
-  }
-  return d;
-}
-
-// Splits off a new segment at an unusually large gap (missing data point)
-// instead of bridging it with a line.
-function splitContiguous(events) {
-  if (events.length < 2) return [];
-
-  const diffs = events.slice(1).map((e, i) => e.timestamp - events[i].timestamp);
-  const median = diffs.slice().sort((a, b) => a - b)[Math.floor(diffs.length / 2)] || 60;
-  const gapThreshold = Math.max(median * 1.8, median + 60);
-
-  const segments = [];
-  let current = [events[0]];
-  for (let i = 1; i < events.length; i++) {
-    if (events[i].timestamp - events[i - 1].timestamp > gapThreshold) {
-      if (current.length >= 2) segments.push(current);
-      current = [events[i]];
-    } else {
-      current.push(events[i]);
-    }
-  }
-  if (current.length >= 2) segments.push(current);
-  return segments;
-}
-
-/** Time-axis ticks rounded to full hours, step size matched to the span. */
-function hourTicks(tMin, tMax, maxTicks) {
-  const steps = [1, 2, 3, 4, 6, 12, 24, 48, 72, 168]; // hours
-  const spanH = (tMax - tMin) / 3600;
-  const stepSec = (steps.find(s => spanH / s <= maxTicks) || steps[steps.length - 1]) * 3600;
-
-  const ticks = [];
-  for (let t = Math.ceil(tMin / stepSec) * stepSec; t <= tMax; t += stepSec) ticks.push(t);
-  return ticks.length ? ticks : [tMin, tMax];
-}
-
-function formatHourTick(t, spanSeconds) {
-  const d = new Date(t * 1000);
-  const hh = d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-  if (spanSeconds <= 26 * 3600) return hh;
-  const dd = d.toLocaleDateString([], { day: "2-digit", month: "2-digit" });
-  return spanSeconds <= 9 * 24 * 3600 ? `${dd} ${hh}` : dd;
-}
-
-// Axes + gridlines for a time line chart; returns scaling functions and yBounds
-// (pixel-Y bounds for smoothPathD(), see above). Shared by drawMeterChart(),
-// drawWeatherChart() and drawSocChart(). `bands` (optional) are background
-// rects — e.g. charge/discharge shading behind the SoC line — drawn first so
-// gridlines/axis/series render on top of them.
-function initChart(svg, tMin, tMax, minVal, maxVal, bands) {
-  svg.innerHTML = "";
-
-  // Set viewBox 1:1 to the actually rendered width — otherwise preserveAspectRatio
-  // scales x and y unevenly and text/lines look distorted.
-  const width = Math.round(svg.getBoundingClientRect().width) || 900;
-  const height = 200;
-  const padLeft = 54, padRight = 16, padTop = 14, padBottom = 28;
-
-  svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
-  svg.style.height = height + "px";
-
-  const tSpan = Math.max(1, tMax - tMin);
-  const vSpan = Math.max(1, maxVal - minVal);
-  const xScale = t => padLeft + ((t - tMin) / tSpan) * (width - padLeft - padRight);
-  const yScale = v => height - padBottom - ((v - minVal) / vSpan) * (height - padTop - padBottom);
-
-  if (bands && bands.length) {
-    for (const b of bands) {
-      const x1 = xScale(b.from), x2 = xScale(b.to);
-      svg.appendChild(svgEl("rect", {
-        x: x1, y: padTop, width: Math.max(0, x2 - x1), height: height - padTop - padBottom,
-        fill: b.color
-      }));
-    }
-  }
-
-  // Horizontal gridlines + Y-axis labels (min / mid / max)
-  [0, 0.5, 1].forEach(f => {
-    const val = minVal + vSpan * f;
-    const y = yScale(val);
-    svg.appendChild(svgEl("line", { x1: padLeft, x2: width - padRight, y1: y, y2: y, stroke: "#22262f" }));
-    const label = svgEl("text", { x: padLeft - 8, y: y + 3, fill: "#666", "font-size": 10, "text-anchor": "end" });
-    label.textContent = Math.round(val);
-    svg.appendChild(label);
-  });
-
-  // Vertical gridlines on full hours (count depends on available width)
-  const maxTicks = Math.max(3, Math.floor((width - padLeft - padRight) / 130));
-  const ticks = hourTicks(tMin, tMax, maxTicks);
-  ticks.forEach((t, i) => {
-    const x = xScale(t);
-    svg.appendChild(svgEl("line", { x1: x, x2: x, y1: padTop, y2: height - padBottom, stroke: "#22262f" }));
-    const label = svgEl("text", {
-      x, y: height - 8, fill: "#666", "font-size": 10,
-      "text-anchor": i === 0 ? "start" : i === ticks.length - 1 ? "end" : "middle"
-    });
-    label.textContent = formatHourTick(t, tSpan);
-    svg.appendChild(label);
-  });
-
-  // Visible axis lines (left + bottom)
-  svg.appendChild(svgEl("path", {
-    d: `M${padLeft},${padTop} L${padLeft},${height - padBottom} L${width - padRight},${height - padBottom}`,
-    fill: "none", stroke: "#333944"
-  }));
-
-  const box = { left: padLeft, right: width - padRight, top: padTop, bottom: height - padBottom };
-  return { xScale, yScale, yBounds: [padTop, height - padBottom], box };
-}
-
-function drawLineSeries(svg, segments, xScale, yScale, yBounds, key, color) {
-  for (const seg of segments) {
-    const pts = seg.map(e => ({ x: xScale(e.timestamp), y: yScale(e[key]) }));
-    svg.appendChild(svgEl("path", {
-      d: smoothPathD(pts, yBounds), fill: "none", stroke: color,
-      "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round"
-    }));
-  }
-}
-
-function drawMeterChart(svg, events) {
-  const tMin = events[0].timestamp, tMax = events[events.length - 1].timestamp;
-  const rawMax = Math.max(1, ...events.map(e => Math.max(e.consumptionWh, e.productionWh)));
-  const maxVal = rawMax * 1.15; // headroom so curve overshoot doesn't touch the top edge
-  const { xScale, yScale, yBounds, box } = initChart(svg, tMin, tMax, 0, maxVal);
-  const segments = splitContiguous(events);
-
-  drawLineSeries(svg, segments, xScale, yScale, yBounds, "productionWh", "#4ade80");
-  drawLineSeries(svg, segments, xScale, yScale, yBounds, "consumptionWh", "#f87171");
-  attachHoverTooltip(svg, xScale, yScale, box, events, [
-    { key: "productionWh", color: "#4ade80", label: "Production", unit: " Wh" },
-    { key: "consumptionWh", color: "#f87171", label: "Consumption", unit: " Wh" }
-  ]);
-}
-
-// Y-axis follows the actual value range (+15% margin) instead of always starting
-// at 0, since e.g. temperature can be negative. floorAtZero still enforces a
-// lower bound of 0 for quantities that can never physically be negative (irradiance).
-function drawWeatherChart(svg, events, key, color, unit, floorAtZero, label, decimals) {
-  const tMin = events[0].timestamp, tMax = events[events.length - 1].timestamp;
-  const vals = events.map(e => e[key]);
-  const rawMin = Math.min(...vals), rawMax = Math.max(...vals);
-  const margin = Math.max(1, (rawMax - rawMin) * 0.15);
-  const minVal = floorAtZero ? Math.max(0, rawMin - margin) : rawMin - margin;
-  const { xScale, yScale, yBounds, box } = initChart(svg, tMin, tMax, minVal, rawMax + margin);
-  const segments = splitContiguous(events);
-
-  drawLineSeries(svg, segments, xScale, yScale, yBounds, key, color);
-  attachHoverTooltip(svg, xScale, yScale, box, events, [
-    { key, color, label: label || key, unit, decimals }
-  ]);
-}
-
-function clearChart(svg, message) {
-  svg.innerHTML = "";
-  svg.setAttribute("viewBox", "0 0 400 40");
-  svg.style.height = "40px";
-  const text = svgEl("text", { x: 10, y: 24, fill: "#666", "font-size": 12 });
-  text.textContent = message;
-  svg.appendChild(text);
-}
-
-async function loadBatteryManager(web3, oracle, battMgrAddress, knownHouseholds, onChainMarketHouseholds) {
-  const batteryKv = $("batteryKv");
-  const tbody = document.querySelector("#batteryTable tbody");
-  batteryKv.innerHTML = "";
-  tbody.innerHTML = "";
-  batteryContract = null;
-  currentBatteryHouseholds = [];
-  batteryCapableHouseholds = new Set();
-
-  if (!battMgrAddress || battMgrAddress === ZERO) {
-    kvRow(batteryKv, "Status", "— not set (market.batteryManager() == address(0))", "muted");
-    $("batteryStatus").innerHTML = `<span class="muted">BatteryManager isn't linked in the market yet (setBatteryManager()) — phase 2 is optional.</span>`;
-    $("batterySocCharts").innerHTML = "";
-    document.querySelector("#batteryEventsTable tbody").innerHTML = "";
-    $("batteryEventsStatus").textContent = "";
-    $("batteryEventsDetails").open = false;
-    return;
-  }
-
-  const battery = new web3.eth.Contract(BATTERY_ABI, battMgrAddress);
-  batteryContract = battery;
-
-  $("batteryStatus").textContent = "Loading BatteryManager…";
-
-  try {
-    const [bOwner, bOracle, managedOnChain] = await Promise.all([
-      battery.methods.owner().call(),
-      battery.methods.oracle().call(),
-      battery.methods.getManagedHouseholds().call()
-    ]);
-
-    kvAddrRow(batteryKv, "Address", battMgrAddress);
-    kvAddrRow(batteryKv, "Owner", bOwner);
-    kvAddrRow(batteryKv, "Oracle", bOracle, bOracle.toLowerCase() === cfg.oracle.toLowerCase() ? "ok" : "bad");
-    kvRow(batteryKv, "Managed households (on-chain)", managedOnChain.length);
-
-    // Union of known list, market-registered and on-chain managed households.
-    const union = mergeHouseholds(
-      mergeHouseholds(knownHouseholds, onChainMarketHouseholds),
-      managedOnChain
-    );
-    currentBatteryHouseholds = union;
-
-    if (union.length === 0) {
-      $("batteryStatus").innerHTML = `<span class="muted">No households known.</span>`;
-      return;
-    }
-
-    const rows = await Promise.all(union.map(async (h) => {
-      const [isManaged, decision, battState] = await Promise.all([
-        battery.methods.isManaged(h.address).call(),
-        battery.methods.getLastDecision(h.address).call(),
-        oracle.methods.getLatestBatteryState(h.address).call()
-      ]);
-      return { ...h, isManaged, decision, battState };
-    }));
-
-    batteryCapableHouseholds = new Set(
-      rows.filter(r => Number(r.battState.capacityWh) > 0).map(r => r.address.toLowerCase())
-    );
-
-    for (const r of rows) {
-      const hasDecision = r.isManaged && Number(r.decision.timestamp) > 0;
-      const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td>${r.id}</td>
-        <td>${addrCell(r.address)}</td>
-        <td class="${r.isManaged ? "ok" : "muted"}">${r.isManaged ? "✓" : "✗"}</td>
-        <td>${hasDecision ? actionBadge(r.decision.action) : `<span class="muted">-</span>`}</td>
-        <td>${hasDecision ? r.decision.amountWh : "-"}</td>
-        <td>${hasDecision ? r.decision.slot : "-"}</td>
-        <td>${hasDecision ? fmtTs(r.decision.timestamp) : "-"}</td>
-        <td>${r.battState.capacityWh > 0 ? r.battState.socPercent + "%" : "-"}</td>
-      `;
-      tbody.appendChild(tr);
-    }
-
-    const managedCount = rows.filter(r => r.isManaged).length;
-    $("batteryStatus").innerHTML = `<span class="ok">${rows.length} household(s) checked, ${managedCount} with managed battery.</span>`;
-
-  } catch (e) {
-    console.error(e);
-    $("batteryStatus").innerHTML = `<span class="bad">Error loading BatteryManager: ${e.message}</span>`;
-  }
-}
-
-async function loadBatteryEvents() {
-  const statusEl = $("batteryEventsStatus");
-  const tbody = document.querySelector("#batteryEventsTable tbody");
-
-  if (!batteryContract || !oracleContract) {
-    statusEl.innerHTML = `<span class="muted">No BatteryManager linked — refresh above first.</span>`;
-    return;
-  }
-
-  statusEl.textContent = "Loading DecisionMade & BatteryUpdated events…";
-  tbody.innerHTML = "";
-
-  try {
-    const [decisionResult, socResult] = await Promise.all([
-      fetchRecentEvents(batteryContract, "DecisionMade"),
-      fetchRecentEvents(oracleContract, "BatteryUpdated")
-    ]);
-    const tsByBlock = await resolveEventTimestamps(decisionResult.events);
-    const idByAddress = addressIdMap(currentBatteryHouseholds);
-
-    const enriched = decisionResult.events.map(e => ({
-      blockNumber: e.blockNumber,
-      timestamp: tsByBlock.get(e.blockNumber) || 0,
-      household: e.returnValues.household,
-      action: Number(e.returnValues.action),
-      amountWh: e.returnValues.amountWh,
-      slot: e.returnValues.slot,
-      reason: e.returnValues.reason
-    })).sort((a, b) => b.timestamp - a.timestamp || b.blockNumber - a.blockNumber);
-
-    for (const ev of enriched) {
-      const id = idByAddress.get(ev.household.toLowerCase()) || short(ev.household);
-      const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td>${ev.timestamp ? fmtTs(ev.timestamp) : "Block #" + ev.blockNumber}</td>
-        <td title="${ev.household}">${id}</td>
-        <td>${actionBadge(ev.action)}</td>
-        <td>${ev.amountWh}</td>
-        <td>${ev.slot}</td>
-        <td class="muted">${ev.reason || "-"}</td>
-      `;
-      tbody.appendChild(tr);
-    }
-
-    // Timestamp derived from the slot, same convention as fetchRangedEvents()
-    // (deterministic, unlike raw block timestamps — see the comment there).
-    const socEnriched = socResult.events
-      .map(e => ({
-        household: e.returnValues.household,
-        slot: e.returnValues.slot,
-        soc: Number(e.returnValues.soc),
-        timestamp: currentStartTimestamp + Number(e.returnValues.slot) * currentSlotDuration
-      }))
-      .sort((a, b) => a.timestamp - b.timestamp);
-
-    renderBatterySocCharts(socEnriched, idByAddress, enriched);
-    $("batteryEventsDetails").open = enriched.length > 0;
-
-    const parts = [];
-    parts.push(enriched.length === 0
-      ? "No DecisionMade events"
-      : `${enriched.length} DecisionMade event(s)`);
-    parts.push(socEnriched.length === 0
-      ? "no BatteryUpdated (SoC) events"
-      : `${socEnriched.length} BatteryUpdated (SoC) event(s)`);
-    statusEl.innerHTML = `<span class="ok">${parts.join(", ")} loaded (from block ${decisionResult.fromBlock}).</span>`;
-
-  } catch (e) {
-    console.error(e);
-    statusEl.innerHTML = `<span class="bad">Error loading events: ${e.message}</span>`;
-    renderBatterySocCharts([], new Map(), []);
-  }
-}
-
-// Small multiples, one line chart per household: x = time, y = SoC % (0-100),
-// shaded green/red in the background for charge/discharge periods (from
-// DecisionMade events, passed as actionEvents). Only households that actually
-// report a battery (capacityWh > 0, see batteryCapableHouseholds) get a chart
-// — others are skipped even if they happen to have BatteryUpdated events
-// (e.g. soc/capacity reported as 0).
-function renderBatterySocCharts(events, idByAddress, actionEvents) {
-  const container = $("batterySocCharts");
-  container.innerHTML = "";
-
-  const filtered = (events || []).filter(e => batteryCapableHouseholds.has(e.household.toLowerCase()));
-
-  if (filtered.length === 0) {
-    container.innerHTML = `<div class="muted" style="font-size:13px;">${
-      events && events.length
-        ? "No household with a battery has BatteryUpdated events in the queried range."
-        : "No BatteryUpdated events loaded — click the button above."
-    }</div>`;
-    return;
-  }
-
-  const byHousehold = new Map();
-  for (const e of filtered) {
-    const key = e.household.toLowerCase();
-    if (!byHousehold.has(key)) byHousehold.set(key, []);
-    byHousehold.get(key).push(e);
-  }
-
-  const actionsByHousehold = new Map();
-  for (const e of (actionEvents || [])) {
-    const key = e.household.toLowerCase();
-    if (!actionsByHousehold.has(key)) actionsByHousehold.set(key, []);
-    actionsByHousehold.get(key).push(e);
-  }
-
-  for (const [addr, evs] of byHousehold.entries()) {
-    const { card, svg } = buildSocCard(idByAddress.get(addr) || short(addr));
-    container.appendChild(card);
-    drawSocChart(svg, evs, actionsByHousehold.get(addr) || []);
-  }
-}
-
-function buildSocCard(id) {
-  const card = document.createElement("details");
-  card.className = "panel chart-card";
-  card.open = true;
-
-  const summary = document.createElement("summary");
-  summary.textContent = `${id} — State of Charge (SoC)`;
-  card.appendChild(summary);
-
-  const svg = svgEl("svg", { style: "width:100%; height:200px; display:block;" });
-  card.appendChild(svg);
-
-  const legend = document.createElement("div");
-  legend.className = "chart-legend";
-  legend.innerHTML = `
-    <span><span class="dot" style="background:#4ade80"></span>Charging</span>
-    <span><span class="dot" style="background:#f87171"></span>Discharging</span>
-  `;
-  card.appendChild(legend);
-
-  return { card, svg };
-}
-
-// Charge/discharge action holds from one DecisionMade event until the next
-// (or until tMax for the last one) — turned into background bands for initChart().
-function buildActionBands(actionEvents, tMin, tMax) {
-  if (!actionEvents || actionEvents.length === 0) return [];
-  const sorted = actionEvents.slice().sort((a, b) => a.timestamp - b.timestamp);
-  const bands = [];
-  for (let i = 0; i < sorted.length; i++) {
-    const color = ACTION_BAND_COLOR[sorted[i].action];
-    if (!color) continue; // IDLE — left unshaded
-    const from = Math.max(tMin, sorted[i].timestamp);
-    const to = Math.min(tMax, i + 1 < sorted.length ? sorted[i + 1].timestamp : tMax);
-    if (to > from) bands.push({ from, to, color });
-  }
-  return bands;
-}
-
-function drawSocChart(svg, events, actionEvents) {
-  const tMin = events[0].timestamp, tMax = events[events.length - 1].timestamp;
-  const bands = buildActionBands(actionEvents, tMin, tMax);
-  const { xScale, yScale, yBounds, box } = initChart(svg, tMin, tMax, 0, 100, bands);
-  const segments = splitContiguous(events);
-
-  drawLineSeries(svg, segments, xScale, yScale, yBounds, "soc", "#a78bfa");
-  attachHoverTooltip(svg, xScale, yScale, box, events, [
-    { key: "soc", color: "#a78bfa", label: "SoC", unit: "%" }
-  ]);
-}
-
-// IncentiveController has no household enumeration function (unlike
-// BatteryManager.getManagedHouseholds()) — use currentHouseholds directly.
-async function loadIncentiveController(web3, incentiveAddress, households) {
-  const kv = $("incentiveKv");
-  const tbody = document.querySelector("#incentiveTable tbody");
-  kv.innerHTML = "";
-  tbody.innerHTML = "";
-  incentiveContract = null;
-
-  if (!incentiveAddress || incentiveAddress === ZERO) {
-    kvRow(kv, "Status", "— not set (market.incentiveController() == address(0))", "muted");
-    $("incentiveStatus").innerHTML = `<span class="muted">IncentiveController isn't linked in the market yet (setIncentiveController()) — phase 3 is optional.</span>`;
-    document.querySelector("#incentiveEventsTable tbody").innerHTML = "";
-    $("incentiveEventsStatus").textContent = "";
-    return;
-  }
-
-  const incentive = new web3.eth.Contract(INCENTIVE_ABI, incentiveAddress);
-  incentiveContract = incentive;
-
-  $("incentiveStatus").textContent = "Loading IncentiveController…";
-
-  try {
-    const owner = await incentive.methods.owner().call();
-    kvAddrRow(kv, "Address", incentiveAddress);
-    kvAddrRow(kv, "Owner", owner);
-
-    if (households.length === 0) {
-      $("incentiveStatus").innerHTML = `<span class="muted">No households known.</span>`;
-      return;
-    }
-
-    const rows = await Promise.all(households.map(async h => {
-      const [score, multiplier] = await Promise.all([
-        incentive.methods.getReputationScore(h.address).call(),
-        incentive.methods.getPriceMultiplier(h.address).call()
-      ]);
-      return { ...h, score, multiplier };
-    }));
-
-    for (const r of rows) {
-      const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td>${r.id}</td>
-        <td>${addrCell(r.address)}</td>
-        <td>${r.score}</td>
-        <td>${(Number(r.multiplier) / 10).toFixed(1)}%</td>
-      `;
-      tbody.appendChild(tr);
-    }
-
-    $("incentiveStatus").innerHTML = `<span class="ok">${rows.length} household(s) checked.</span>`;
-  } catch (e) {
-    console.error(e);
-    $("incentiveStatus").innerHTML = `<span class="bad">Error loading IncentiveController: ${e.message}</span>`;
-  }
-}
-
-async function loadIncentiveEvents() {
-  const statusEl = $("incentiveEventsStatus");
-  const tbody = document.querySelector("#incentiveEventsTable tbody");
-
-  if (!incentiveContract) {
-    statusEl.innerHTML = `<span class="muted">No IncentiveController linked — refresh above first.</span>`;
-    return;
-  }
-
-  statusEl.textContent = "Loading ScoreUpdated events…";
-  tbody.innerHTML = "";
-
-  try {
-    const { events, fromBlock } = await fetchRecentEvents(incentiveContract, "ScoreUpdated");
-    const tsByBlock = await resolveEventTimestamps(events);
-    const ids = addressIdMap(currentHouseholds);
-
-    const enriched = events.map(e => ({
-      timestamp: tsByBlock.get(e.blockNumber) || 0,
-      household: e.returnValues.household,
-      newScore: e.returnValues.newScore,
-      consumptionDeviation: e.returnValues.consumptionDeviation,
-      productionDeviation: e.returnValues.productionDeviation
-    })).sort((a, b) => b.timestamp - a.timestamp);
-
-    for (const ev of enriched) {
-      const id = ids.get(ev.household.toLowerCase()) || short(ev.household);
-      const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td>${fmtTs(ev.timestamp)}</td>
-        <td title="${ev.household}">${id}</td>
-        <td>${ev.newScore}</td>
-        <td>${ev.consumptionDeviation}</td>
-        <td>${ev.productionDeviation}</td>
-      `;
-      tbody.appendChild(tr);
-    }
-
-    statusEl.innerHTML = enriched.length === 0
-      ? `<span class="muted">No ScoreUpdated events found in the queried block range.</span>`
-      : `<span class="ok">${enriched.length} event(s) loaded (from block ${fromBlock}).</span>`;
-  } catch (e) {
-    console.error(e);
-    statusEl.innerHTML = `<span class="bad">Error loading events: ${e.message}</span>`;
-  }
-}
-
-async function loadForecastVsActual() {
-  const statusEl = $("forecastActualStatus");
-  const tbody = document.querySelector("#forecastActualTable tbody");
-
-  if (!incentiveContract) {
-    statusEl.innerHTML = `<span class="muted">No IncentiveController linked — refresh above first.</span>`;
-    return;
-  }
-  if (!oracleContract) {
-    statusEl.innerHTML = `<span class="muted">Oracle not connected.</span>`;
-    return;
-  }
-
-  statusEl.textContent = "Loading forecast vs. actual…";
-  tbody.innerHTML = "";
-
-  try {
-    const currentSlot = Number(await oracleContract.methods.getCurrentSlot().call());
-    const ids = addressIdMap(currentHouseholds);
-    const MAX_SLOTS_BACK = 30;
-    const MAX_ROWS_PER_HOUSEHOLD = 6;
-
-    const rows = [];
-    for (const h of currentHouseholds) {
-      let found = 0;
-      for (let slot = currentSlot; slot >= 0 && slot > currentSlot - MAX_SLOTS_BACK && found < MAX_ROWS_PER_HOUSEHOLD; slot--) {
-        const forecast = await incentiveContract.methods.getForecast(h.address, slot).call();
-        if (Number(forecast.timestamp) === 0) continue; // keine Prognose fuer diesen Slot abgegeben
-        const actual = await incentiveContract.methods.getActual(h.address, slot).call();
-        rows.push({
-          slot,
-          household: h.address,
-          id: ids.get(h.address.toLowerCase()) || short(h.address),
-          forecastCons: forecast.expectedConsumptionWh,
-          actualCons: actual.actualConsumptionWh,
-          forecastProd: forecast.expectedProductionWh,
-          actualProd: actual.actualProductionWh
-        });
-        found++;
+  const { net: settlementNet, slot: settlementSlot } = settlementNetAsOf(settlementsBySlot, focusSlot);
+
+  // Consumption/production/battery are read from the historical event log at
+  // (or just before) focusSlot, not "latest" — so the table pages back in
+  // time along with the charts. Battery capacity is treated as static config
+  // and still fetched live; only its SoC/state are historical. Price factor
+  // has no historical getter on IncentiveController, so it always reflects
+  // the current live multiplier regardless of the selected slot.
+  const rows = await Promise.all(entries.map(async (e) => {
+    const key = e.addr.toLowerCase();
+    let consumptionWh = null, productionWh = null, socPercent = null, batteryState = null, capacityWh = null, priceFactor = null;
+    const hasBattery = !e.isGrid && managedSet.has(key);
+
+    if (!e.isGrid && focusSlot !== null) {
+      const mEvents = meterByHousehold[key] || [];
+      const mIdx = latestIndexAtOrBefore(mEvents, focusSlot);
+      if (mIdx >= 0) {
+        consumptionWh = mEvents[mIdx].returnValues.consumption;
+        productionWh = mEvents[mIdx].returnValues.production;
+      }
+
+      if (hasBattery) {
+        const bEvents = batteryByHousehold[key] || [];
+        const bIdx = latestIndexAtOrBefore(bEvents, focusSlot);
+        if (bIdx >= 0) {
+          socPercent = Number(bEvents[bIdx].returnValues.soc);
+          if (bIdx >= 1) {
+            const prevSoc = Number(bEvents[bIdx - 1].returnValues.soc);
+            batteryState = socPercent > prevSoc ? { cls: "charging", label: "Charging" }
+              : socPercent < prevSoc ? { cls: "discharging", label: "Discharging" }
+              : { cls: "idle", label: "Idle" };
+          }
+          try {
+            const battery = await oracleR.methods.getLatestBatteryState(e.addr).call();
+            capacityWh = BigInt(battery.capacityWh);
+          } catch (err) {}
+        }
       }
     }
-
-    rows.sort((a, b) => b.slot - a.slot);
-
-    for (const r of rows) {
-      const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td>${r.slot}</td>
-        <td title="${r.household}">${r.id}</td>
-        <td>${r.forecastCons}</td>
-        <td>${r.actualCons}</td>
-        <td>${r.forecastProd}</td>
-        <td>${r.actualProd}</td>
-      `;
-      tbody.appendChild(tr);
+    if (incentiveR) {
+      try { priceFactor = await incentiveR.methods.getPriceMultiplier(e.addr).call(); } catch (err) {}
     }
 
-    statusEl.innerHTML = rows.length === 0
-      ? `<span class="muted">No forecast/actual pairs found in the last ${MAX_SLOTS_BACK} slots.</span>`
-      : `<span class="ok">${rows.length} row(s) loaded.</span>`;
-  } catch (e) {
-    console.error(e);
-    statusEl.innerHTML = `<span class="bad">Error loading forecast/actual data: ${e.message}</span>`;
-  }
-}
+    return { ...e, consumptionWh, productionWh, socPercent, batteryState, capacityWh, priceFactor, settlementChange: settlementNet[e.addr] || 0n };
+  }));
 
-async function testSettleSlot() {
-  $("settleResult").textContent = "Simulating…";
-  try {
-    const market = new readWeb3.eth.Contract(MARKET_ABI, cfg.market);
-    await market.methods.settleSlot().call();
-    $("settleResult").innerHTML = `<span class="ok">✓ Would run without reverting.</span>`;
-  } catch (e) {
-    $("settleResult").innerHTML = `<span class="bad">✗ Reverts: ${e.message}</span>`;
+  // The grid owner has no meter of its own — derive its consumption/production
+  // as the residual that balances everyone else (see Transactions page).
+  const gridRows = rows.filter(r => r.isGrid);
+  if (gridRows.length > 0) {
+    let totalConsumption = 0n, totalProduction = 0n;
+    for (const r of rows) {
+      if (r.isGrid) continue;
+      if (r.consumptionWh !== null) totalConsumption += BigInt(r.consumptionWh);
+      if (r.productionWh !== null) totalProduction += BigInt(r.productionWh);
+    }
+    const communitySurplus = totalProduction - totalConsumption;
+    const gridConsumption = (communitySurplus > 0n ? communitySurplus : 0n).toString();
+    const gridProduction = (communitySurplus < 0n ? -communitySurplus : 0n).toString();
+    for (const r of gridRows) {
+      r.consumptionWh = gridConsumption;
+      r.productionWh = gridProduction;
+    }
   }
+
+  tbody.innerHTML = "";
+  for (const r of rows) {
+    const tr = document.createElement("tr");
+    const consTxt = r.consumptionWh !== null ? fmtToken(BigInt(r.consumptionWh), 3) + " kWh" : "?";
+    const prodTxt = r.productionWh !== null ? fmtToken(BigInt(r.productionWh), 3) + " kWh" : "?";
+    tr.innerHTML = `
+      <td>${addrCell(r.addr)}</td>
+      <td>${r.type}</td>
+      <td>${consTxt}</td>
+      <td>${prodTxt}</td>
+      <td>${fmtSigned(r.settlementChange, decimals, symbol)}</td>
+      <td>${batteryCellHtml(r.socPercent, r.capacityWh, r.batteryState)}</td>
+      <td>${priceFactorHtml(r.priceFactor)}</td>
+    `;
+    tbody.appendChild(tr);
+  }
+
+  $("accountsStatus").innerHTML = focusSlot === null
+    ? `<span class="muted">No data in the current lookback window.</span>`
+    : `<span class="ok">${rows.length} account(s) — as of slot ${focusSlot}${settlementSlot !== null ? ` (last settlement as of then: slot ${settlementSlot})` : ` (no settlement yet)`}.</span>`;
 }
 
 // ─────────────────────────────────────────────────────────────
-//  Init
+//  Shared time window — builds card skeletons once, then re-renders the
+//  table + both charts together on every nav click.
 // ─────────────────────────────────────────────────────────────
 
-async function init() {
-  setupNav();
-  readWeb3 = new Web3(new Web3.providers.HttpProvider(RPC_URL));
+function buildChartSkeletons() {
+  const cpContainer = $("cpCharts");
+  const battContainer = $("battCharts");
+  cpContainer.innerHTML = "";
+  battContainer.innerHTML = "";
 
-  cfg.oracle = readParamFromUrl("oracle") || "";
-  cfg.market = readParamFromUrl("market") || "";
-  cfg.batteryOverride = readParamFromUrl("battery") || "";
-  cfg.incentiveOverride = readParamFromUrl("incentive") || "";
-  const householdsRaw = readParamFromUrl("households");
-  try { cfg.households = householdsRaw ? JSON.parse(householdsRaw) : []; }
-  catch (e) { cfg.households = []; }
+  const { households, meterByHousehold, batteryByHousehold, managedSet } = timeState;
 
-  applyConfigToForm();
-  initMeterRangeDefaults();
-
-  if (!cfg.oracle || !cfg.market) {
-    $("missingParamsBanner").style.display = "block";
+  if (!households || households.length === 0) {
+    $("cpStatus").innerHTML = `<span class="muted">No households registered.</span>`;
+    $("battStatus").innerHTML = `<span class="muted">No households have a battery registered with BatteryManager.</span>`;
     return;
   }
 
-  try {
-    cfg.oracle = Web3.utils.toChecksumAddress(cfg.oracle);
-    cfg.market = Web3.utils.toChecksumAddress(cfg.market);
-  } catch (e) {
-    $("cfgStatus").innerHTML = `<span class="bad">Invalid address in URL params.</span>`;
+  let anyMeterData = false;
+  for (const addr of households) {
+    const key = addr.toLowerCase();
+    const card = document.createElement("div");
+    card.className = "acct-chart-card";
+    if ((meterByHousehold[key] || []).length === 0) {
+      card.innerHTML = `<h3 title="${addr}">${short(addr)}</h3><div class="chart-meta muted">No meter readings in the current lookback window.</div>`;
+      cpContainer.appendChild(card);
+      continue;
+    }
+    anyMeterData = true;
+    card.innerHTML = `<h3 title="${addr}">${short(addr)}</h3><div class="chart-meta" data-cp-meta="${key}"></div>`;
+    const wrap = document.createElement("div");
+    wrap.className = "chart-window";
+    wrap.setAttribute("data-cp-chart", key);
+    card.appendChild(wrap);
+    cpContainer.appendChild(card);
+  }
+  $("cpStatus").innerHTML = anyMeterData
+    ? `<span class="ok">${households.length} account(s).</span>`
+    : `<span class="muted">No meter readings in the current lookback window for any account — widen it above.</span>`;
+
+  const batteryHouseholds = households.filter(a => managedSet.has(a.toLowerCase()));
+  if (batteryHouseholds.length === 0) {
+    $("battStatus").innerHTML = `<span class="muted">No households have a battery registered with BatteryManager.</span>`;
     return;
   }
-
-  await refresh();
+  let anyBattData = false;
+  for (const addr of batteryHouseholds) {
+    const key = addr.toLowerCase();
+    const card = document.createElement("div");
+    card.className = "acct-chart-card";
+    if ((batteryByHousehold[key] || []).length === 0) {
+      card.innerHTML = `<h3 title="${addr}">${short(addr)}</h3><div class="chart-meta muted">No battery readings in the current lookback window.</div>`;
+      battContainer.appendChild(card);
+      continue;
+    }
+    anyBattData = true;
+    card.innerHTML = `<h3 title="${addr}">${short(addr)}</h3><div class="chart-meta" data-batt-meta="${key}"></div>`;
+    const wrap = document.createElement("div");
+    wrap.className = "chart-window";
+    wrap.setAttribute("data-batt-chart", key);
+    card.appendChild(wrap);
+    battContainer.appendChild(card);
+  }
+  $("battStatus").innerHTML = anyBattData
+    ? `<span class="ok">${batteryHouseholds.length} account(s).</span>`
+    : `<span class="muted">No battery readings in the current lookback window — widen it above.</span>`;
 }
 
-init();
+async function renderTimeWindow() {
+  if (!timeState) { updateNavUI([]); return; }
+  const { allSlots, offset, capacity, meterByHousehold, batteryByHousehold } = timeState;
+  const windowSlots = allSlots.slice(offset, offset + capacity);
+  const startSlot = windowSlots.length > 0 ? windowSlots[0] : null;
+  const endSlot = windowSlots.length > 0 ? windowSlots[windowSlots.length - 1] : null;
+
+  for (const key of Object.keys(meterByHousehold)) {
+    const wrap = document.querySelector(`[data-cp-chart="${key}"]`);
+    if (!wrap) continue;
+    const visible = startSlot === null ? [] : meterByHousehold[key]
+      .filter(e => { const s = Number(e.returnValues.slot); return s >= startSlot && s <= endSlot; })
+      .map(e => ({ slot: Number(e.returnValues.slot), consumption: BigInt(e.returnValues.consumption), production: BigInt(e.returnValues.production) }));
+    wrap.innerHTML = "";
+    wrap.appendChild(buildConsumptionSvg(visible));
+    const meta = document.querySelector(`[data-cp-meta="${key}"]`);
+    if (meta) meta.textContent = visible.length > 0 ? `${visible.length} reading(s) in this window` : `No readings in this window`;
+  }
+
+  for (const key of Object.keys(batteryByHousehold)) {
+    const wrap = document.querySelector(`[data-batt-chart="${key}"]`);
+    if (!wrap) continue;
+    const meta = document.querySelector(`[data-batt-meta="${key}"]`);
+    const visible = startSlot === null ? [] : batteryByHousehold[key]
+      .filter(e => { const s = Number(e.returnValues.slot); return s >= startSlot && s <= endSlot; })
+      .map(e => ({ slot: Number(e.returnValues.slot), soc: Number(e.returnValues.soc) }));
+
+    if (visible.length < 2) {
+      wrap.innerHTML = `<div class="muted" style="font-size:11px;">Not enough battery readings in this window to chart a trend.</div>`;
+      if (meta) meta.textContent = visible.length === 1 ? `${visible[0].soc}% at slot ${visible[0].slot}` : "";
+      continue;
+    }
+    wrap.innerHTML = "";
+    wrap.appendChild(buildBatterySvg(visible));
+    const last = visible[visible.length - 1], prev = visible[visible.length - 2];
+    const state = last.soc > prev.soc ? { cls: "charging", label: "Charging" }
+      : last.soc < prev.soc ? { cls: "discharging", label: "Discharging" }
+      : { cls: "idle", label: "Idle" };
+    if (meta) meta.innerHTML = `<span class="batt-state ${state.cls}" style="display:inline;">${state.label}</span> — ${last.soc}% · ${visible.length} reading(s) in this window`;
+  }
+
+  await renderAccountsTableRows(endSlot);
+  updateNavUI(windowSlots);
+}
+
+function navTime(direction) {
+  if (!timeState) return;
+  const maxOffset = Math.max(0, timeState.allSlots.length - timeState.capacity);
+  if (direction === "back") timeState.offset = Math.max(0, timeState.offset - 1);
+  else if (direction === "fwd") timeState.offset = Math.min(maxOffset, timeState.offset + 1);
+  else if (direction === "now") timeState.offset = maxOffset;
+  renderTimeWindow();
+}
+
+function updateNavUI(windowSlots) {
+  const rangeEl = $("navRangeLabel");
+  const backBtn = $("navBack"), fwdBtn = $("navFwd"), nowBtn = $("navNow");
+
+  if (!timeState || timeState.allSlots.length === 0) {
+    if (rangeEl) rangeEl.textContent = "";
+    [backBtn, fwdBtn, nowBtn].forEach(b => { if (b) b.disabled = true; });
+    return;
+  }
+
+  const maxOffset = Math.max(0, timeState.allSlots.length - timeState.capacity);
+  if (rangeEl && windowSlots.length > 0) {
+    rangeEl.textContent = `Slot ${windowSlots[0]} → ${windowSlots[windowSlots.length - 1]} (of ${timeState.allSlots.length} total)`;
+  }
+  if (backBtn) backBtn.disabled = timeState.offset <= 0;
+  if (fwdBtn) fwdBtn.disabled = timeState.offset >= maxOffset;
+  if (nowBtn) nowBtn.disabled = timeState.offset >= maxOffset;
+}
+
+function buildConsumptionSvg(points) {
+  const width = Math.max(points.length * CP_BAR_SLOT, 200);
+  const height = CP_CHART_HEIGHT;
+  const baseline = height - 4;
+  const uid = cpChartUid++;
+
+  let maxWh = 0n;
+  for (const p of points) {
+    const top = p.production > p.consumption ? p.production : p.consumption;
+    if (top > maxWh) maxWh = top;
+  }
+  if (maxWh === 0n) maxWh = 1n;
+
+  const scale = (wh) => Number((wh * 1000n) / maxWh) / 1000 * (baseline - 6);
+
+  const svg = svgEl("svg", { viewBox: `0 0 ${width} ${height}`, width, height, style: "display:block;" });
+
+  // Same flat-color + diagonal-stripe texture treatment used on the battery
+  // chart, instead of a plain flat fill.
+  const defs = svgEl("defs", {});
+  const stripes = svgEl("pattern", {
+    id: `cpStripes-${uid}`, width: "6", height: "6",
+    patternUnits: "userSpaceOnUse", patternTransform: "rotate(45)"
+  });
+  stripes.appendChild(svgEl("rect", { width: "6", height: "6", fill: "transparent" }));
+  stripes.appendChild(svgEl("line", { x1: "0", y1: "0", x2: "0", y2: "6", stroke: "rgba(255,255,255,0.09)", "stroke-width": "3" }));
+  defs.appendChild(stripes);
+  svg.appendChild(defs);
+
+  points.forEach((p, i) => {
+    const x = i * CP_BAR_SLOT + (CP_BAR_SLOT - CP_BAR_WIDTH) / 2;
+    const consumptionPx = scale(p.consumption);
+    const isDeficit = p.consumption > p.production;
+    const consumptionColor = isDeficit ? "#7a2222" : "#8a5a12";
+
+    const rectCons = svgEl("rect", {
+      x, y: baseline - consumptionPx, width: CP_BAR_WIDTH, height: consumptionPx, fill: consumptionColor, rx: 2
+    });
+    const titleCons = svgEl("title", {});
+    titleCons.textContent = `Slot ${p.slot} — consumption ${fmtToken(p.consumption, 3)} kWh, production ${fmtToken(p.production, 3)} kWh`;
+    rectCons.appendChild(titleCons);
+    svg.appendChild(rectCons);
+    svg.appendChild(svgEl("rect", {
+      x, y: baseline - consumptionPx, width: CP_BAR_WIDTH, height: consumptionPx, fill: `url(#cpStripes-${uid})`, rx: 2
+    }));
+
+    if (p.production > p.consumption) {
+      const surplusPx = scale(p.production - p.consumption);
+      const rectSurplus = svgEl("rect", {
+        x, y: baseline - consumptionPx - surplusPx, width: CP_BAR_WIDTH, height: surplusPx, fill: "#1c6b41", rx: 2
+      });
+      const titleSurplus = svgEl("title", {});
+      titleSurplus.textContent = `Slot ${p.slot} — surplus ${fmtToken(p.production - p.consumption, 3)} kWh`;
+      rectSurplus.appendChild(titleSurplus);
+      svg.appendChild(rectSurplus);
+      svg.appendChild(svgEl("rect", {
+        x, y: baseline - consumptionPx - surplusPx, width: CP_BAR_WIDTH, height: surplusPx, fill: `url(#cpStripes-${uid})`, rx: 2
+      }));
+    }
+  });
+
+  svg.appendChild(svgEl("line", { x1: 0, y1: baseline, x2: width, y2: baseline, stroke: "#333944", "stroke-width": 1 }));
+  return svg;
+}
+
+// ─────────────────────────────────────────────────────────────
+//  Battery history — per account, Android-style SoC area chart
+// ─────────────────────────────────────────────────────────────
+
+function buildBatterySvg(points) {
+  const width = Math.max((points.length - 1) * BATT_POINT_SLOT + 20, 200);
+  const height = BATT_CHART_HEIGHT;
+  const top = 6, baseline = height - 16;
+  const usable = baseline - top;
+  const uid = battChartUid++;
+
+  const x = (i) => 10 + i * BATT_POINT_SLOT;
+  const y = (soc) => baseline - (soc / 100) * usable;
+
+  const svg = svgEl("svg", { viewBox: `0 0 ${width} ${height}`, width, height, style: "display:block;" });
+
+  // Flat solid color per state plus a subtle diagonal-stripe texture overlay
+  // — the same two-layer "solid + repeating diagonal texture" treatment used
+  // for selected rows elsewhere in the app (no glossy gradient).
+  const defs = svgEl("defs", {});
+  const stripes = svgEl("pattern", {
+    id: `battStripes-${uid}`, width: "6", height: "6",
+    patternUnits: "userSpaceOnUse", patternTransform: "rotate(45)"
+  });
+  stripes.appendChild(svgEl("rect", { width: "6", height: "6", fill: "transparent" }));
+  stripes.appendChild(svgEl("line", { x1: "0", y1: "0", x2: "0", y2: "6", stroke: "rgba(255,255,255,0.09)", "stroke-width": "3" }));
+  defs.appendChild(stripes);
+  svg.appendChild(defs);
+
+  const solidFills = {
+    charge: "#1c6b41",
+    discharge: "#7a2222",
+    idle: "#3a3f4a"
+  };
+
+  [0, 25, 50, 75, 100].forEach(pct => {
+    const gy = y(pct);
+    svg.appendChild(svgEl("line", { x1: 0, y1: gy, x2: width, y2: gy, stroke: "#22262f", "stroke-width": 1 }));
+  });
+
+  const lightFills = {
+    charge: "rgba(94, 227, 160, 0.16)",
+    discharge: "rgba(248, 129, 129, 0.16)",
+    idle: "rgba(154, 160, 171, 0.14)"
+  };
+
+  for (let i = 0; i < points.length - 1; i++) {
+    const p0 = points[i], p1 = points[i + 1];
+    const x0 = x(i), x1 = x(i + 1);
+    const y0 = y(p0.soc), y1 = y(p1.soc);
+    const key = p1.soc > p0.soc ? "charge" : (p1.soc < p0.soc ? "discharge" : "idle");
+    const shape = `${x0},${baseline} ${x0},${y0} ${x1},${y1} ${x1},${baseline}`;
+
+    // Lighter tint of the same color, filling the air above the SoC line up
+    // to the top of the chart (the highlighted-column look from the reference).
+    const airShape = `${x0},${top} ${x0},${y0} ${x1},${y1} ${x1},${top}`;
+    svg.appendChild(svgEl("polygon", { points: airShape, fill: lightFills[key] }));
+
+    const poly = svgEl("polygon", { points: shape, fill: solidFills[key] });
+    const title = svgEl("title", {});
+    title.textContent = `Slot ${p0.slot} → ${p1.slot}: ${p0.soc}% → ${p1.soc}%`;
+    poly.appendChild(title);
+    svg.appendChild(poly);
+
+    svg.appendChild(svgEl("polygon", { points: shape, fill: `url(#battStripes-${uid})` }));
+  }
+
+  svg.appendChild(svgEl("line", { x1: 0, y1: baseline, x2: width, y2: baseline, stroke: "#333944", "stroke-width": 1 }));
+
+  return svg;
+}
 </script>
 
 </body>

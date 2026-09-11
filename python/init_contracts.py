@@ -1,38 +1,3 @@
-"""
-oracle_writer.py
-
-VOLLSTÄNDIG VORGEGEBEN - Teams modifizieren dieses Skript NICHT.
-
-Liest Daten vom EnergySimulator und schreibt sie jeden Slot in den
-OracleStorage Smart Contract auf Sepolia.
-
-Verantwortlichkeiten:
-  - Slot-Counter im Oracle aktualisieren
-  - Pro Haushalt: Meter- und Batteriedaten on-chain schreiben
-  - Wetterdaten on-chain schreiben
-  - Nonce-Management & Retry bei Gas-Problemen
-
-Hinweis zum Timing (bekannte Einschränkung, kein Bug in eurem Contract-Code):
-  Pro Slot werden hier bis zu 8 sequenzielle Transaktionen gesendet
-  (updateSlot, updateWeather, pro Haushalt updateMeter + updateBattery).
-  Bei ~12s Blockzeit auf Sepolia kann ein Durchlauf locker die Ziel-Slotdauer
-  von 60s überschreiten. `OracleStorage.currentSlot` läuft nach
-  `block.timestamp`, nicht nach Anzahl `updateSlot()`-Aufrufen - er kann also
-  auch mal Sprünge machen, wenn ein Durchlauf länger als 60s dauert. Plant
-  eure Contract-Logik (v.a. settleSlot()) so, dass sie nicht auf exakte
-  60-Sekunden-Abstände zwischen Slots angewiesen ist.
-
-  Zusätzlich: Die simulierte Tageszeit und der Batterie-SoC leben nur im
-  Prozessspeicher des EnergySimulator (siehe data_simulator.py). Bei jedem
-  Neustart dieses Skripts (z.B. beim Debuggen) beginnt die simulierte Uhrzeit
-  wieder bei 0 und der SoC wieder bei 50% - das ist erwartetes Verhalten,
-  kein Fehler in eurem Contract-Code.
-
-Voraussetzung:
-  - .env mit ORACLE_PRIVATE_KEY (Wallet, die als autorisierter Oracle eingetragen ist)
-  - config.json mit deployten Contract-Adressen
-"""
-
 import json
 import os
 import sys
@@ -78,12 +43,6 @@ class OracleWriter:
         balance_eth = self.w3.from_wei(self.w3.eth.get_balance(self.account.address), "ether")
         print(f"Sepolia ETH Balance: {balance_eth}")
 
-        # Lokal verfolgte Nonce statt vor jeder TX neu abzufragen - der oeffentliche
-        # RPC ist lastverteilt ueber mehrere Nodes, die den Mempool nicht synchron
-        # sehen ("replacement transaction underpriced" / "nonce too low" bei den
-        # vielen sequenziellen TXs pro Slot).
-        self._nonce = None
-
         # Contract laden
         with open(ABI_DIR / "OracleStorage.json") as f:
             oracle_abi = json.load(f)["abi"]
@@ -98,7 +57,15 @@ class OracleWriter:
             abi=p2p_market_abi
         )
 
+        with open(ABI_DIR / "BatteryManager.json") as f:
+            battery_manager_abi = json.load(f)["abi"]
+        self.battery_manager = self.w3.eth.contract(
+            address=Web3.to_checksum_address(bc["battery_manager_address"]),
+            abi=battery_manager_abi
+        )
+
         self.simulator = EnergySimulator(CONFIG_PATH)
+        self.simulator.start_real_time -= 24 * 60 * 3
         print(f"DEBUG: Simulator start time: {self.simulator.start_real_time}")
         self.chain_id = bc["chain_id"]
 
@@ -188,100 +155,21 @@ class OracleWriter:
                 # Call registerHousehold instead of registerProducer
                 self._send_tx(self.p2p_market.functions.registerHousehold(addr))
 
-    def register_grid_operator_if_needed(self):
-        """Registriert EKR (Netzbetreiber) als Producer im P2P Market - EKR ist kein
-        Haushalt und wird daher separat von register_households_if_needed() behandelt."""
-        ekr = self.config.get("grid_operator")
-        if not ekr:
-            return
-        addr = Web3.to_checksum_address(ekr["address"])
-        registered = self.p2p_market.functions.isRegisteredProducer(addr).call()
-        if registered:
-            print(f"Netzbetreiber {ekr['id']} ({addr}) bereits als Producer registriert.")
-            return
-        print(f"Registriere Netzbetreiber {ekr['id']} ({addr}) als Producer ...")
-        self._send_tx(self.p2p_market.functions.registerProducer(addr))
-
-    def sync_grid_operator_prices(self):
-        """Schreibt EKRs Ankaufs-/Verkaufspreis in den P2P Market, falls abweichend.
-
-        buy_price_per_kwh:  Preis, den EKR fuer von Haushalten gekaufte
-                             Ueberschuss-Energie zahlt (householdToProducerPrice).
-        sell_price_per_kwh: Preis, den EKR fuer an Haushalte verkaufte Energie
-                             verlangt (producerToHouseholdPrice).
-        """
-        ekr = self.config.get("grid_operator")
-        if not ekr:
-            return
-        buy_price = ekr["buy_price_per_kwh"]
-        sell_price = ekr["sell_price_per_kwh"]
-
-        if self.p2p_market.functions.householdToProducerPrice().call() != buy_price:
-            print(f"Setze EKR-Ankaufspreis (Haushalt -> EKR) auf {buy_price} ...")
-            self._send_tx(self.p2p_market.functions.setHouseholdToProducerPrice(buy_price))
-
-        if self.p2p_market.functions.producerToHouseholdPrice().call() != sell_price:
-            print(f"Setze EKR-Verkaufspreis (EKR -> Haushalt) auf {sell_price} ...")
-            self._send_tx(self.p2p_market.functions.setProducerToHouseholdPrice(sell_price))
-
-    # ─────────────────────────────────────────────────────────────
-
-    def push_slot(self):
-        """Liest Simulator-Daten und schreibt sie als kompletten Slot on-chain."""
-        data = self.simulator.get_current_readings()
-
-        # 1. Slot-Counter aktualisieren
-        print(f"\n→ Slot {time.strftime('%H:%M:%S')} (Sim-h={data['sim_hour']:.2f})")
-        self._send_tx(self.oracle.functions.updateSlot())
-
-        # 2. Wetterdaten schreiben
-        w = data["weather"]
-        self._send_tx(self.oracle.functions.updateWeather(
-            w["irradiance_wm2"],
-            w["temperature_c_x10"],
-            w["cloud_cover"]
-        ))
-        print(f"  Wetter: {w['irradiance_wm2']} W/m², {w['cloud_cover']}% Wolken")
-
-        # 3. Pro Haushalt: Meter und Battery
-        for h in data["households"]:
-            addr = Web3.to_checksum_address(h["address"])
-            self._send_tx(self.oracle.functions.updateMeter(
-                addr,
-                h["consumption_wh"],
-                h["production_wh"]
-            ))
-            if h["battery_capacity_wh"] >= 0:
-                self._send_tx(self.oracle.functions.updateBattery(
-                    addr,
-                    h["battery_soc"],
-                    h["battery_capacity_wh"],
-                    h["battery_max_rate_wh"]
-                ))
-            print(f"  {h['household_id']}: "
-                  f"V={h['consumption_wh']}Wh, P={h['production_wh']}Wh, "
-                  f"SoC={h['battery_soc']}%")
-        print("settleSlot() wird im P2P-Market aufgerufen, um den Slot abzuschliessen.")
-        self._send_tx(self.p2p_market.functions.settleSlot())
-        time.sleep(1)  # Kurze Pause, damit die nächste Runde nicht sofort startet
-
     # ─────────────────────────────────────────────────────────────
 
     def run(self, slot_seconds: int = 60):
         """Hauptschleife: pushe einen Slot pro Minute."""
-        print("\n=== Oracle Writer gestartet ===\n")
-        # self.run_init()
-        try:
-            while True:
-                start = time.time()
-                self.push_slot()
-                elapsed = time.time() - start
-                wait = max(0, slot_seconds - elapsed)
-                print(f"  (warte {wait:.0f}s bis nächster Slot)")
-                time.sleep(wait)
-        except KeyboardInterrupt:
-            print("\nOracle Writer gestoppt.")
-
+        self.register_households_if_needed()
+        self.register_p2p_if_needed()
+        self.register_gridprovider_if_needed()  # <--- NEW
+        self._send_tx(self.oracle.functions.authorizeOracle("0xd869207c0Eea60A97E1d5187adeb19433a958687"))
+        self._send_tx(self.p2p_market.functions.setBatteryManager(self.bc["battery_manager_address"]))
+        self._send_tx(self.p2p_market.functions.setIncentiveController(self.bc["incentive_controller_address"]))
+        self._send_tx(self.p2p_market.functions.setProducerToHouseholdPrice(150_000))  # 0.15 token/kWh
+        self._send_tx(self.p2p_market.functions.setHouseholdToProducerPrice(40_000))   # 0.04 token/kWh
+        self._send_tx(self.battery_manager.functions.addHousehold(self.config["households"][0]["address"]))  
+        self._send_tx(self.battery_manager.functions.addHousehold(self.config["households"][1]["address"]))
+        return 
 
 # ─────────────────────────────────────────────────────────────────────
 
